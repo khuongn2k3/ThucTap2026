@@ -1,0 +1,26 @@
+services:
+  backend-laravel:
+    build: ./backend-laravel
+    container_name: hunyuan_laravel
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend-laravel:/var/www
+      - ./shared/input:/data/input
+      - ./shared/results:/data/results
+    command: php artisan serve --host=0.0.0.0 --port=8000
+    depends_on:
+      - mysql
+
+  mysql:
+    image: mysql:8.0
+    container_name: hunyuan_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: hunyuan
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+    ports:
+      - "3306:3306"

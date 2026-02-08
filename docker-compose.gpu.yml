@@ -1,0 +1,21 @@
+services:
+  backend-python:
+    build: ./backend-python
+    container_name: hunyuan_python
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./backend-python:/app
+      - ./backend-python/models:/models
+      - ./shared/input:/data/input
+      - ./shared/results:/data/results
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
