@@ -1,0 +1,19 @@
+--extra-index-url https://mirrors.cloud.tencent.com/pypi/simple/
+--extra-index-url https://mirrors.aliyun.com/pypi/simple
+
+# Web/API
+fastapi==0.115.12
+uvicorn==0.34.3
+gradio==5.33.0
+pydantic==2.10.6
+
+# Utils
+tqdm==4.66.5
+psutil==6.0.0
+pyyaml==6.0.2
+configargparse==1.7
+omegaconf==2.3.0
+
+# HTTP
+requests
+httpx
