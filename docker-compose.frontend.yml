@@ -1,7 +1,0 @@
-services:
-  frontend-react:
-    build: ./frontend-react
-    container_name: hunyuan_frontend
-    restart: unless-stopped
-    ports:
-      - "3000:80"
