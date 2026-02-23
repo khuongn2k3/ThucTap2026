@@ -207,7 +207,7 @@ echo -e "${MAGENTA}[4/12] CREATING VIRTUAL ENVIRONMENT${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 if [ ! -d "venv" ]; then
-    python3 -m venv venv
+    python3.10 -m venv venv
 fi
 
 source venv/bin/activate
