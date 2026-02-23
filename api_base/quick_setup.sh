@@ -147,8 +147,8 @@ echo -e "\n${MAGENTA}═══════════════════�
 echo -e "${MAGENTA}[2/12] SETTING UP MYSQL${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
-sudo systemctl start mysql
-sudo systemctl enable mysql
+sudo service mysql start || mysqld_safe --daemonize --user=mysql 2>/dev/null || true
+echo "Skip systemctl enable on Vast.ai"
 
 DB_PASSWORD=$(openssl rand -base64 16 | tr -d "=+/" | cut -c1-16)
 
