@@ -317,6 +317,9 @@ echo -e "${MAGENTA}════════════════════�
 
 SECRET_KEY=$(openssl rand -hex 32)
 
+# Đọc lại password từ file để chắc chắn đúng
+DB_PASSWORD=$(grep "Password:" ~/hunyuan3d_setup/mysql_credentials.txt | awk '{print $2}')
+
 cat > .env <<EOF
 # =========================================
 # 🔐 DATABASE CONFIGURATION
