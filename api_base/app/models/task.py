@@ -2,7 +2,7 @@
 3D Model Job (Task) database model.
 """
 
-from sqlalchemy import Column, Integer, String, Enum, TIMESTAMP, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Enum, TIMESTAMP, ForeignKey, Text, DateTime
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.models.base_db import Base
@@ -23,8 +23,10 @@ class ModelJob(Base):
     )
     input_image_url = Column(String(500), nullable=False)
     output_model_url = Column(String(500), nullable=True)
+    tokens_used = Column(Integer, nullable=False, default=1)
     error_message = Column(Text, nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
+    completed_at = Column(DateTime, nullable=True)
     updated_at = Column(
         TIMESTAMP, 
         server_default=func.now(), 
