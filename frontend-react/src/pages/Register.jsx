@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import api from "../services/api"
+import { register } from "../services/api"  // ✅ Import function register
 
 export default function Register() {
   const navigate = useNavigate()
@@ -24,16 +24,35 @@ export default function Register() {
     setLoading(true)
     setError("")
 
-    try {
-      const res = await api.post("/register", form)
+    // ✅ Validate password confirmation
+    if (form.password !== form.password_confirmation) {
+      setError("Mật khẩu không khớp")
+      setLoading(false)
+      return
+    }
 
-      if (res.data?.token) {
-        localStorage.setItem("token", res.data.token)
+    try {
+      // ✅ Chỉ gửi name, email, password (bỏ password_confirmation)
+      const res = await register({
+        name: form.name,
+        email: form.email,
+        password: form.password
+      })
+
+      console.log("✅ Register success:", res.data)
+
+      // ✅ Backend trả về access_token, không phải token
+      if (res.data?.access_token) {
+        localStorage.setItem("token", res.data.access_token)
       }
 
+      // ✅ Redirect to home or dashboard
       navigate("/dashboard")
     } catch (err) {
-      setError(err.response?.data?.message || "Đăng ký thất bại")
+      console.error("❌ Register error:", err.response?.data)
+      
+      // ✅ Backend trả về detail, không phải message
+      setError(err.response?.data?.detail || "Đăng ký thất bại")
     } finally {
       setLoading(false)
     }
@@ -101,6 +120,7 @@ export default function Register() {
               placeholder="••••••••"
               onChange={handleChange}
               required
+              minLength={6}
               className="
                 w-full rounded-lg border border-gray-300 px-4 py-2.5
                 focus:outline-none focus:ring-2 focus:ring-purple-500
@@ -119,6 +139,7 @@ export default function Register() {
               placeholder="••••••••"
               onChange={handleChange}
               required
+              minLength={6}
               className="
                 w-full rounded-lg border border-gray-300 px-4 py-2.5
                 focus:outline-none focus:ring-2 focus:ring-purple-500

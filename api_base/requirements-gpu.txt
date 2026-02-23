@@ -1,25 +1,46 @@
 --extra-index-url https://mirrors.cloud.tencent.com/pypi/simple/
---extra-index-url https://mirrors.aliyun.com/pypi/simple
+--extra-index-url https://mirrors.aliyun.com/pypi/simple/
+--extra-index-url https://download.pytorch.org/whl/cu121
 
-# Build Tools
+# =========================================
+# PYTORCH GPU (CUDA 12.1) - CRITICAL!
+# =========================================
+# Change cu121 to cu118/cu124 based on your GPU's CUDA version
+# Check with: nvidia-smi
+torch==2.5.1
+torchvision==0.20.1
+torchaudio==2.5.1
+
+# =========================================
+# BUILD TOOLS
+# =========================================
 ninja==1.11.1.1
 pybind11==2.13.4
 
-# Core ML/Deep Learning
+# =========================================
+# CORE ML/DEEP LEARNING
+# =========================================
 transformers==4.46.0
 diffusers==0.30.0
 accelerate==1.1.1
 pytorch-lightning==1.9.5
 huggingface-hub==0.30.2
 safetensors==0.4.4
+timm
+torchdiffeq
+torchmetrics==1.6.0
 
-# Scientific
+# =========================================
+# SCIENTIFIC COMPUTING
+# =========================================
 numpy==1.24.4
 scipy==1.14.1
 einops==0.8.0
 pandas==2.2.2
 
-# Vision
+# =========================================
+# COMPUTER VISION & IMAGE PROCESSING
+# =========================================
 opencv-python==4.10.0.84
 imageio==2.36.0
 scikit-image==0.24.0
@@ -28,7 +49,9 @@ realesrgan==0.3.0
 tb_nightly==2.18.0a20240726
 basicsr==1.4.2
 
-# 3D
+# =========================================
+# 3D MESH PROCESSING
+# =========================================
 trimesh==4.4.7
 pymeshlab==2022.2.post3
 pygltflib==1.16.3
@@ -36,20 +59,47 @@ xatlas==0.0.9
 open3d==0.18.0
 pythreejs
 
-# Config
+# =========================================
+# CONFIGURATION MANAGEMENT
+# =========================================
 omegaconf==2.3.0
 pyyaml==6.0.2
 configargparse==1.7
 
-# GPU
+# =========================================
+# WEB FRAMEWORK (for demo)
+# =========================================
+gradio==5.33.0
+fastapi==0.115.12
+uvicorn==0.34.3
+pydantic==2.10.6
+
+# =========================================
+# UTILITIES
+# =========================================
+tqdm==4.66.5
+psutil==6.0.0
+
+# =========================================
+# GPU COMPUTING (requires CUDA 12.x)
+# =========================================
 cupy-cuda12x==13.4.1
 onnxruntime==1.16.3
-torchmetrics==1.6.0
+
+# =========================================
+# DISTRIBUTED TRAINING (Linux only)
+# =========================================
 deepspeed
 
-# Blender
+# =========================================
+# BLENDER (Optional - for advanced mesh processing)
+# =========================================
 bpy==3.6.0
 
-# misc
-timm
-torchdiffeq
+python-dotenv==1.0.1
+pymysql==1.1.1
+cryptography==43.0.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.12
+Pillow==10.4.0

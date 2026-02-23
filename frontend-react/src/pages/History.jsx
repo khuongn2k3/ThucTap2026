@@ -12,9 +12,8 @@ export default function History() {
       try {
         setLoading(true)
 
-        // ❌ CHƯA CÓ BACKEND → để trống
-        // const res = await api.get("/model-jobs")
-        // setJobs(res.data)
+        const res = await api.get("/my-jobs")
+        setJobs(res.data.jobs)
 
       } catch (err) {
         setError("Không thể tải lịch sử mô hình")
@@ -73,9 +72,9 @@ export default function History() {
 
             <tbody className="divide-y">
               {jobs.map(job => (
-                <tr key={job.id} className="text-sm">
+                <tr key={job.job_id} className="text-sm">
                   <td className="px-6 py-4 font-mono text-gray-800">
-                    {job.id}
+                    {job.job_id}
                   </td>
                   <td className="px-6 py-4 text-gray-600">
                     {job.created_at}
@@ -84,9 +83,9 @@ export default function History() {
                     <StatusBadge status={job.status} />
                   </td>
                   <td className="px-6 py-4">
-                    {job.model_url ? (
+                    {job.output_model_url ? (
                       <a
-                        href={job.model_url}
+                        href={job.output_model_url}
                         className="text-indigo-600 hover:underline"
                       >
                         Download

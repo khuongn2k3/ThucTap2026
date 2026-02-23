@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import api from "../services/api"
+import { login } from "../services/api"  // ✅ Import function
 
 export default function Login() {
   const navigate = useNavigate()
@@ -16,7 +16,7 @@ export default function Login() {
     setLoading(true)
 
     try {
-      const res = await api.post("/login", { email, password })
+      const res = await login({ email, password })  //  Dùng function
 
       if (!res.data?.access_token) {
         throw new Error("Không nhận được access_token")
@@ -25,7 +25,8 @@ export default function Login() {
       localStorage.setItem("token", res.data.access_token)
       navigate("/dashboard")
     } catch (err) {
-      setError("Email hoặc mật khẩu không đúng")
+      console.error(" Login error:", err.response?.data)
+      setError(err.response?.data?.detail || "Email hoặc mật khẩu không đúng")
     } finally {
       setLoading(false)
     }

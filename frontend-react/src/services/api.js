@@ -38,13 +38,56 @@ api.interceptors.response.use(
   }
 )
 
-// THÊM HÀM NÀY
+// =========================================
+//                AUTH API 
+// =========================================
+
+export function register(data) {
+  return api.post("/auth/register", data)
+}
+
+export function login(data) {
+  return api.post("/auth/login", data)
+}
+
+export function getMe() {
+  return api.get("/auth/me")  
+}
+
+// =========================================
+// PROFILE API
+// =========================================
+
+export function updateProfile(formData) {
+  return api.post("/auth/me/update", formData)  
+}
+
+export function changePassword(data) {
+  return api.post("/auth/me/change-password", data)  
+}
+
+// =========================================
+// 3D CONVERSION API
+// =========================================
+
 export function convert3D(formData) {
-  return api.post("/convert-3d", formData, {
+  return api.post("/convert-3d/upload", formData, {
     headers: {
       "Content-Type": "multipart/form-data",
     },
   })
+}
+
+export function getJobStatus(jobId) {
+  return api.get(`/job-status/${jobId}`)  
+}
+
+// =========================================
+// HEALTH CHECK
+// =========================================
+
+export function healthCheck() {
+  return api.get("/health")
 }
 
 export default api

@@ -1,6 +1,6 @@
 import { NavLink, Link, useNavigate } from "react-router-dom"
 import { useEffect, useState } from "react"
-import api from "../services/api"
+import { getMe } from "../services/api"  //  Import function
 
 const MENU_BY_ROLE = {
   admin: [
@@ -22,9 +22,12 @@ export default function Navbar() {
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
-    api.get("/me")
+    getMe()  //  Dùng function
       .then(res => setUser(res.data))
-      .catch(() => handleLogout())
+      .catch(err => {
+        console.error("❌ Navbar error:", err.response?.data)
+        handleLogout()
+      })
   }, [])
 
   const handleLogout = () => {

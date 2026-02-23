@@ -25,7 +25,9 @@ venv.bak/
 .env
 .env.local
 .env.production
-
+.env.*.local
+api_base/.env
+frontend-react/.env
 # ============================================
 # HUNYUAN3D MODEL (KHÔNG PUSH)
 # ============================================

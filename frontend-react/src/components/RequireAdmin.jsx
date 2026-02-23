@@ -1,12 +1,12 @@
 import { Navigate } from "react-router-dom"
 import { useEffect, useState } from "react"
-import api from "../services/api"
+import { getMe } from "../services/api"  // Import function
 
 export default function RequireAdmin({ children }) {
   const [allowed, setAllowed] = useState(null)
 
   useEffect(() => {
-    api.get("/me")
+    getMe()  // Dùng function
       .then(res => {
         if (res.data.role === "admin") {
           setAllowed(true)
@@ -14,7 +14,10 @@ export default function RequireAdmin({ children }) {
           setAllowed(false)
         }
       })
-      .catch(() => setAllowed(false))
+      .catch(err => {
+        console.error(" RequireAdmin error:", err.response?.data)
+        setAllowed(false)
+      })
   }, [])
 
   if (allowed === null) {

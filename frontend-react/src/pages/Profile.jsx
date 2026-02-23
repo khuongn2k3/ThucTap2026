@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import api from "../services/api"
+import { getMe, updateProfile, changePassword } from "../services/api"  // ✅ Import functions
 
 export default function Profile() {
   const [user, setUser] = useState(null)
@@ -30,13 +30,14 @@ export default function Profile() {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const res = await api.get("/me")
+        const res = await getMe()  // ✅ Dùng function
         setUser(res.data)
         setForm({
           name: res.data.name,
           email: res.data.email,
         })
-      } catch {
+      } catch (err) {
+        console.error("❌ Profile error:", err.response?.data)
         setError("Không thể tải thông tin cá nhân")
       } finally {
         setLoading(false)
@@ -80,7 +81,7 @@ export default function Profile() {
         formData.append("avatar", avatarFile)
       }
 
-      const res = await api.post("/me/update", formData)
+      const res = await updateProfile(formData)  // ✅ Dùng function
 
       setUser(prev => ({
         ...prev,
@@ -93,7 +94,8 @@ export default function Profile() {
       setAvatarPreview(null)
 
       alert("Cập nhật thông tin thành công")
-    } catch {
+    } catch (err) {
+      console.error("❌ Update error:", err.response?.data)
       setError("Không thể cập nhật hồ sơ")
     } finally {
       setSaving(false)
@@ -106,7 +108,7 @@ export default function Profile() {
       setSaving(true)
       setError("")
 
-      await api.post("/me/change-password", passwordForm)
+      await changePassword(passwordForm)  // Dùng function
 
       alert("Đổi mật khẩu thành công")
       setPasswordForm({
@@ -116,7 +118,8 @@ export default function Profile() {
       })
       setShowPasswordForm(false)
     } catch (err) {
-      setError(err.response?.data?.message || "Không thể đổi mật khẩu")
+      console.error(" Password error:", err.response?.data)
+      setError(err.response?.data?.detail || "Không thể đổi mật khẩu")
     } finally {
       setSaving(false)
     }

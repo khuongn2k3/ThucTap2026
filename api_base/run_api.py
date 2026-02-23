@@ -11,8 +11,8 @@ from app.config import settings
 if __name__ == "__main__":
     uvicorn.run(
         "app.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,  # Auto-reload khi code thay đổi
-        log_level="info"
+        host=settings.API_HOST,      # Đọc từ .env
+        port=settings.API_PORT,      # Đọc từ .env
+        reload=settings.DEBUG,       # Auto-reload nếu DEBUG=True
+        log_level=settings.LOG_LEVEL.lower()  # Đọc từ .env
     )

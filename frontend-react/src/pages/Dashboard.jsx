@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import api from "../services/api"
+import { getMe } from "../services/api"  //  Import function
 
 export default function Dashboard() {
   const [user, setUser] = useState(null)
@@ -19,7 +19,7 @@ export default function Dashboard() {
         setLoading(true)
 
         // Lấy user hiện tại
-        const meRes = await api.get("/me")
+        const meRes = await getMe()  //  Dùng function
         setUser(meRes.data)
 
         // Chưa có backend
@@ -27,6 +27,7 @@ export default function Dashboard() {
         // setStats(statsRes.data)
 
       } catch (err) {
+        console.error("Dashboard error:", err.response?.data)
         setError("Không thể tải dữ liệu dashboard")
       } finally {
         setLoading(false)
@@ -57,7 +58,7 @@ export default function Dashboard() {
       {/* HEADER */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">
-          👋 Chào {user?.name || "bạn"}
+         Chào {user?.name || "bạn"}
         </h1>
         <p className="mt-1 text-gray-600">
           Tổng quan hoạt động tạo mô hình 3D của bạn

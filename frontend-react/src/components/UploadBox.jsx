@@ -1,23 +1,31 @@
 import { useState, useRef } from "react"
-import { convert3D } from "../services/api"
+import { convert3D, getJobStatus } from "../services/api"
 
 export default function UploadBox({ onResult, onStart, onError }) {
-  const [file, setFile] = useState(null)
-  const [preview, setPreview] = useState(null)
+  const [file, setFile] = useState(null)  // ← SINGLE FILE
+  const [preview, setPreview] = useState(null)  // ← SINGLE PREVIEW
   const [loading, setLoading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState(null)
   const [dragging, setDragging] = useState(false)
   const fileRef = useRef()
 
-  const handleFile = (f) => {
-    if (!f) return
-    setFile(f)
-    setPreview(URL.createObjectURL(f))
+  const handleFile = (selectedFile) => {
+    if (!selectedFile) return
+
+    // Validate file type
+    if (!selectedFile.type.startsWith('image/')) {
+      setError("Vui lòng chọn file ảnh hợp lệ")
+      return
+    }
+
+    setFile(selectedFile)
+    setPreview(URL.createObjectURL(selectedFile))
     setError(null)
   }
 
   const clearFile = () => {
+    if (preview) URL.revokeObjectURL(preview)
     setFile(null)
     setPreview(null)
     setProgress(0)
@@ -36,21 +44,57 @@ export default function UploadBox({ onResult, onStart, onError }) {
     onStart && onStart()
 
     try {
-      const res = await convert3D(file, setProgress)
-      onResult && onResult(res)
+      // ✅ TẠO FORMDATA VỚI 1 FILE DUY NHẤT
+      const formData = new FormData()
+      formData.append("file", file)  // ← Backend expects "file" (singular)
+      
+      //  GỌI API
+      const res = await convert3D(formData)
+      const jobId = res.data.job_id
+      
+      // Poll mỗi 3 giây
+      const poll = setInterval(async () => {
+        try {
+          const status = await getJobStatus(jobId)
+          if (status.data.status === "completed") {
+            clearInterval(poll)
+            setLoading(false)   // ← tắt ở đây
+            onResult && onResult(status.data)
+          } else if (status.data.status === "failed") {
+            clearInterval(poll)
+            setLoading(false)   // ← và ở đây
+            onError && onError()
+          }
+        } catch (e) {
+          clearInterval(poll)
+          setLoading(false)
+          onError && onError()
+        }
+      }, 3000)
+      
     } catch (e) {
-      setError(e.response?.data?.message || "Lỗi xử lý 3D")
+      console.error("❌ Convert3D error:", e.response?.data)
+      setError(e.response?.data?.detail || e.response?.data?.message || "Lỗi xử lý 3D")
       onError && onError()
-    }
-
-    setLoading(false)
+    } 
   }
 
   return (
     <div className="flex flex-col gap-5">
-      <h3 className="text-lg font-semibold text-gray-900">
-        Image to 3D
-      </h3>
+      {/* HEADER */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-gray-900">
+          Image to 3D
+        </h3>
+        {file && (
+          <button
+            onClick={clearFile}
+            className="text-sm text-red-500 hover:text-red-600"
+          >
+            Xóa ảnh
+          </button>
+        )}
+      </div>
 
       {/* DROPZONE */}
       <div
@@ -63,10 +107,11 @@ export default function UploadBox({ onResult, onStart, onError }) {
         onDrop={(e) => {
           e.preventDefault()
           setDragging(false)
-          handleFile(e.dataTransfer.files[0])
+          const droppedFile = e.dataTransfer.files[0]
+          handleFile(droppedFile)
         }}
         className={`
-          relative flex h-60 cursor-pointer flex-col items-center
+          relative flex min-h-[240px] cursor-pointer flex-col items-center
           justify-center rounded-xl border-2 border-dashed
           transition-all duration-200
           ${
@@ -86,44 +131,27 @@ export default function UploadBox({ onResult, onStart, onError }) {
           onChange={(e) => handleFile(e.target.files[0])}
         />
 
-        {/* CLEAR BUTTON */}
-        {preview && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              clearFile()
-            }}
-            className="
-              absolute right-2 top-2 z-10
-              rounded-full bg-black/60 p-1.5
-              text-xs text-white
-              transition hover:bg-black
-            "
-          >
-            ✕
-          </button>
-        )}
-
         {!preview ? (
-          <>
+          <div className="text-center">
             <div className="text-4xl">📷</div>
-            <p className="mt-2 text-center text-sm font-medium text-gray-700">
+            <p className="mt-2 text-sm font-medium text-gray-700">
               Kéo & thả ảnh vào đây
             </p>
             <p className="text-xs text-gray-500">
               hoặc click để chọn ảnh
             </p>
-          </>
+          </div>
         ) : (
-          <img
-            src={preview}
-            alt="preview"
-            className="
-              max-h-full max-w-full rounded-lg
-              object-contain shadow-md
-              animate-fadeIn
-            "
-          />
+          <div className="relative w-full max-w-sm p-4">
+            <img
+              src={preview}
+              alt="preview"
+              className="w-full rounded-lg border bg-white shadow-sm"
+            />
+            <div className="mt-2 text-center text-sm text-gray-600">
+              {file?.name}
+            </div>
+          </div>
         )}
       </div>
 
@@ -139,7 +167,7 @@ export default function UploadBox({ onResult, onStart, onError }) {
           disabled:cursor-not-allowed disabled:opacity-50
         "
       >
-        {loading ? "Đang xử lý..." : "Generate 3D"}
+        {loading ? "Đang xử lý..." : "Generate 3D Model"}
       </button>
 
       {/* PROGRESS */}
@@ -162,7 +190,7 @@ export default function UploadBox({ onResult, onStart, onError }) {
 
       {error && (
         <p className="text-sm text-red-500">
-          {error}
+          ❌ {error}
         </p>
       )}
     </div>

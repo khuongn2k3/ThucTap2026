@@ -46,7 +46,7 @@ export default function Convert3D() {
           </p>
 
           <a
-            href={result.model_url}
+            href={result.output_model_url}
             target="_blank"
             rel="noreferrer"
             className="
