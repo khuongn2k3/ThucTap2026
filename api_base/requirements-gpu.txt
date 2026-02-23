@@ -72,7 +72,7 @@ configargparse==1.7
 gradio==5.33.0
 fastapi==0.115.12
 uvicorn==0.34.3
-pydantic==2.10.6
+pydantic[email]==2.10.6
 
 # =========================================
 # UTILITIES
