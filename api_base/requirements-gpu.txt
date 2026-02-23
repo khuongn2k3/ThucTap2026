@@ -94,7 +94,7 @@ deepspeed
 # =========================================
 # BLENDER (Optional - for advanced mesh processing)
 # =========================================
-bpy==3.6.0
+#bpy==3.6.0
 
 python-dotenv==1.0.1
 pymysql==1.1.1
