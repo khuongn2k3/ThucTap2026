@@ -26,9 +26,8 @@ NC='\033[0m'
 GITHUB_REPO="https://github.com/khuongn2k3/ThucTap2026.git"
 API_BASE_SUBDIR="api_base"
 HUNYUAN_HF_REPO="tencent/Hunyuan3D-2.1"
-# Nhập Google OAuth khi chạy script
-read -p "Nhập GOOGLE_CLIENT_ID: " GOOGLE_CLIENT_ID
-read -p "Nhập GOOGLE_CLIENT_SECRET: " GOOGLE_CLIENT_SECRET
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
 
 # ==========================================
 # Banner
@@ -81,7 +80,7 @@ echo -e "${MAGENTA}[0/12] PRE-FLIGHT CHECKS${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 # Check internet
-if ! ping -c 1 google.com &> /dev/null; then
+if ! curl -s --max-time 5 https://google.com > /dev/null; then
     echo -e "${RED}❌ No internet connection!${NC}"
     exit 1
 fi
