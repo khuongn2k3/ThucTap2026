@@ -213,12 +213,11 @@ echo -e "${MAGENTA}════════════════════�
 echo -e "${YELLOW}This will take 30-60 minutes (~10-15 GB)...${NC}"
 echo -e "${CYAN}Go get some tea! 🍵${NC}\n"
 
-# Dùng trực tiếp không qua pipe để giữ venv active
 pip install -r requirements-gpu.txt
 
 echo -e "\n${GREEN}✅ Dependencies installed${NC}"
 
-# Verify PyTorch trong cùng shell
+# Verify PyTorch
 echo "Verifying PyTorch..."
 python -c "
 import torch
@@ -232,16 +231,16 @@ else:
 "
 
 # ==========================================
-# STEP 7: Clone Hunyuan3D-2.1
+# STEP 7: Clone Hunyuan3D-2.1 (Model + Code)
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[7/12] CLONING HUNYUAN3D-2.1 MODEL${NC}"
+echo -e "${MAGENTA}[7/12] CLONING HUNYUAN3D-2.1 MODEL + CODE${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 HUNYUAN_DIR="./hunyuan3d-2.1"
 
 if [ -d "$HUNYUAN_DIR" ]; then
-    echo -e "${GREEN}✅ hunyuan3d-2.1/ already exists, skipping${NC}"
+    echo -e "${YELLOW}⚠️  hunyuan3d-2.1/ đã tồn tại${NC}"
 else
     echo -e "${YELLOW}Cloning Hunyuan3D-2.1 from HuggingFace (~8GB)...${NC}"
     apt install -y git-lfs > /dev/null 2>&1
@@ -251,8 +250,49 @@ else
     cd "$HUNYUAN_DIR"
     git lfs pull
     cd ..
-    echo -e "${GREEN}✅ Hunyuan3D-2.1 cloned${NC}"
+    echo -e "${GREEN}✅ Hunyuan3D-2.1 model cloned${NC}"
 fi
+
+# ✅ FIX: Clone code files từ GitHub (model_worker.py, hy3dshape, v.v.)
+echo -e "${YELLOW}Cloning Hunyuan3D-2 code từ GitHub...${NC}"
+GITHUB_CODE_DIR="/tmp/hunyuan3d-code"
+
+if [ -d "$GITHUB_CODE_DIR" ]; then
+    rm -rf "$GITHUB_CODE_DIR"
+fi
+
+git clone --depth=1 https://github.com/Tencent/Hunyuan3D-2.git "$GITHUB_CODE_DIR"
+
+echo "Copying code files into hunyuan3d-2.1/..."
+cp "$GITHUB_CODE_DIR/model_worker.py"     "$HUNYUAN_DIR/"
+cp "$GITHUB_CODE_DIR/api_models.py"       "$HUNYUAN_DIR/"
+cp "$GITHUB_CODE_DIR/api_server.py"       "$HUNYUAN_DIR/"
+cp "$GITHUB_CODE_DIR/constants.py"        "$HUNYUAN_DIR/"
+cp "$GITHUB_CODE_DIR/logger_utils.py"     "$HUNYUAN_DIR/"
+cp "$GITHUB_CODE_DIR/torchvision_fix.py"  "$HUNYUAN_DIR/"
+
+# Copy hy3dshape nếu chưa có
+if [ ! -d "$HUNYUAN_DIR/hy3dshape" ]; then
+    cp -r "$GITHUB_CODE_DIR/hy3dshape" "$HUNYUAN_DIR/"
+    echo -e "${GREEN}✅ hy3dshape copied${NC}"
+else
+    echo -e "${GREEN}✅ hy3dshape already exists${NC}"
+fi
+
+# Cleanup
+rm -rf "$GITHUB_CODE_DIR"
+
+echo -e "${GREEN}✅ Code files copied successfully${NC}"
+
+# Verify
+python -c "
+import sys
+sys.path.insert(0, '$HUNYUAN_DIR')
+sys.path.insert(0, '$HUNYUAN_DIR/hy3dshape')
+sys.path.insert(0, '$HUNYUAN_DIR/hy3dpaint')
+import model_worker
+print('✅ model_worker import OK')
+" && echo -e "${GREEN}✅ model_worker verified!${NC}" || echo -e "${RED}❌ model_worker import failed!${NC}"
 
 # ==========================================
 # STEP 8: Compile CUDA modules
@@ -316,8 +356,6 @@ echo -e "${MAGENTA}[11/12] GENERATING .ENV FILE${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 SECRET_KEY=$(openssl rand -hex 32)
-
-# Đọc lại password từ file để chắc chắn đúng
 DB_PASSWORD=$(grep "Password:" ~/hunyuan3d_setup/mysql_credentials.txt | awk '{print $2}')
 
 cat > .env <<EOF
