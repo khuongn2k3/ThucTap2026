@@ -126,7 +126,7 @@ DB_PASSWORD=$(openssl rand -base64 16 | tr -d "=+/" | cut -c1-16)
 
 mysql <<EOSQL
 CREATE DATABASE IF NOT EXISTS hunyuan3d_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'khuongn2k3'@'localhost' IDENTIFIED BY '$DB_PASSWORD';
+CREATE USER IF NOT EXISTS 'khuongn2k3'@'localhost' IDENTIFIED WITH mysql_native_password BY '$DB_PASSWORD';
 GRANT ALL PRIVILEGES ON hunyuan3d_db.* TO 'khuongn2k3'@'localhost';
 FLUSH PRIVILEGES;
 EOSQL
