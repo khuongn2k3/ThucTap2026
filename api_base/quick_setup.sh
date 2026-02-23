@@ -2,36 +2,19 @@
 # ==========================================
 # 🚀 HUNYUAN3D GPU SERVER - FULL AUTO SETUP
 # ==========================================
-# Usage: 
-#   chmod +x quick_setup.sh
-#   ./quick_setup.sh
-# 
-# Time: ~60-90 phút (tùy internet speed)
-# ==========================================
 
 set -e
 
-# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
 MAGENTA='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# ==========================================
-# CONFIG - Chỉnh ở đây nếu cần
-# ==========================================
-GITHUB_REPO="https://github.com/khuongn2k3/ThucTap2026.git"
-API_BASE_SUBDIR="api_base"
-HUNYUAN_HF_REPO="tencent/Hunyuan3D-2.1"
 GOOGLE_CLIENT_ID=""
 GOOGLE_CLIENT_SECRET=""
 
-# ==========================================
-# Banner
-# ==========================================
 clear
 echo -e "${CYAN}"
 cat << "EOF"
@@ -48,8 +31,7 @@ echo -e "${NC}"
 echo "This script will:"
 echo "  ✓ Check system requirements"
 echo "  ✓ Install MySQL server"
-echo "  ✓ Clone api_base from GitHub"
-echo "  ✓ Setup Python environment"
+echo "  ✓ Setup Python 3.10 environment"
 echo "  ✓ Install all dependencies (~10-15 GB)"
 echo "  ✓ Compile CUDA modules"
 echo "  ✓ Clone Hunyuan3D-2.1 from HuggingFace (~8 GB)"
@@ -61,7 +43,6 @@ echo -e "${YELLOW}⏱️  Estimated time: 60-90 minutes${NC}"
 echo -e "${YELLOW}💾 Total download: ~18-23 GB${NC}"
 echo ""
 
-# Hỏi EXTERNAL_URL (IP server)
 echo -e "${CYAN}Nhập IP server của bạn (ví dụ: 175.155.64.231):${NC}"
 read -p "Server IP: " SERVER_IP
 EXTERNAL_URL="http://${SERVER_IP}:8000"
@@ -79,14 +60,12 @@ echo -e "\n${MAGENTA}═══════════════════�
 echo -e "${MAGENTA}[0/12] PRE-FLIGHT CHECKS${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
-# Check internet
 if ! curl -s --max-time 5 https://google.com > /dev/null; then
     echo -e "${RED}❌ No internet connection!${NC}"
     exit 1
 fi
 echo -e "${GREEN}✅ Internet connection OK${NC}"
 
-# Check disk space
 AVAILABLE_GB=$(df -BG . | tail -1 | awk '{print $4}' | sed 's/G//')
 if [ "$AVAILABLE_GB" -lt 50 ]; then
     echo -e "${RED}❌ Need at least 50GB free space. Available: ${AVAILABLE_GB}GB${NC}"
@@ -94,7 +73,6 @@ if [ "$AVAILABLE_GB" -lt 50 ]; then
 fi
 echo -e "${GREEN}✅ Disk space: ${AVAILABLE_GB}GB available${NC}"
 
-# Check GPU
 if ! command -v nvidia-smi &> /dev/null; then
     echo -e "${RED}❌ nvidia-smi not found!${NC}"
     exit 1
@@ -108,10 +86,6 @@ echo -e "${GREEN}✅ GPU: $GPU_NAME${NC}"
 echo -e "${GREEN}✅ VRAM: $((GPU_MEMORY / 1024)) GB${NC}"
 echo -e "${GREEN}✅ CUDA: $CUDA_VERSION${NC}"
 
-# Check Python
-PYTHON_VERSION=$(python3 --version | awk '{print $2}')
-echo -e "${GREEN}✅ Python: $PYTHON_VERSION${NC}"
-
 echo -e "\n${GREEN}✅ All pre-flight checks passed!${NC}"
 sleep 1
 
@@ -122,23 +96,22 @@ echo -e "\n${MAGENTA}═══════════════════�
 echo -e "${MAGENTA}[1/12] INSTALLING SYSTEM PACKAGES${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
-sudo apt update -qq
-sudo apt install -y \
-    mysql-server \
-    git \
-    wget \
-    curl \
-    vim \
-    htop \
-    unzip \
-    python3-pip \
-    python3-venv \
-    python3-dev \
-    libmysqlclient-dev \
-    pkg-config \
+apt update -qq
+apt install -y \
+    mysql-server git wget curl vim htop unzip \
+    python3-pip python3-venv python3-dev \
+    libmysqlclient-dev pkg-config \
     > /dev/null 2>&1
 
-echo -e "${GREEN}✅ System packages installed${NC}"
+# Cài Python 3.10 nếu chưa có
+if ! command -v python3.10 &> /dev/null; then
+    echo "Installing Python 3.10..."
+    add-apt-repository ppa:deadsnakes/ppa -y > /dev/null 2>&1
+    apt update -qq
+    apt install -y python3.10 python3.10-venv python3.10-dev > /dev/null 2>&1
+fi
+
+echo -e "${GREEN}✅ System packages installed (Python $(python3.10 --version))${NC}"
 
 # ==========================================
 # STEP 2: Setup MySQL
@@ -147,22 +120,14 @@ echo -e "\n${MAGENTA}═══════════════════�
 echo -e "${MAGENTA}[2/12] SETTING UP MYSQL${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
-sudo service mysql start || mysqld_safe --daemonize --user=mysql 2>/dev/null || true
-echo "Skip systemctl enable on Vast.ai"
+service mysql start || true
 
 DB_PASSWORD=$(openssl rand -base64 16 | tr -d "=+/" | cut -c1-16)
 
-sudo mysql <<EOSQL
-CREATE DATABASE IF NOT EXISTS hunyuan3d_db 
-    CHARACTER SET utf8mb4 
-    COLLATE utf8mb4_unicode_ci;
-
-CREATE USER IF NOT EXISTS 'khuongn2k3'@'localhost' 
-    IDENTIFIED BY '$DB_PASSWORD';
-
-GRANT ALL PRIVILEGES ON hunyuan3d_db.* 
-    TO 'khuongn2k3'@'localhost';
-
+mysql <<EOSQL
+CREATE DATABASE IF NOT EXISTS hunyuan3d_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS 'khuongn2k3'@'localhost' IDENTIFIED BY '$DB_PASSWORD';
+GRANT ALL PRIVILEGES ON hunyuan3d_db.* TO 'khuongn2k3'@'localhost';
 FLUSH PRIVILEGES;
 EOSQL
 
@@ -188,31 +153,32 @@ echo -e "\n${MAGENTA}═══════════════════�
 echo -e "${MAGENTA}[3/12] VERIFYING API_BASE DIRECTORY${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
-# Kiểm tra đang đứng đúng trong api_base chưa
 if [ ! -f "requirements-gpu.txt" ] || [ ! -f "run_api.py" ]; then
     echo -e "${RED}❌ Không tìm thấy file api_base!${NC}"
-    echo "Hãy chắc chắn bạn đang đứng trong thư mục api_base:"
-    echo "  cd ThucTap2026/api_base"
-    echo "  ./quick_setup.sh"
+    echo "  cd ThucTap2026/api_base && ./quick_setup.sh"
     exit 1
 fi
-
 echo -e "${GREEN}✅ api_base directory OK${NC}"
 
 # ==========================================
-# STEP 4: Create Python virtual environment
+# STEP 4: Create Python 3.10 virtual environment
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[4/12] CREATING VIRTUAL ENVIRONMENT${NC}"
+echo -e "${MAGENTA}[4/12] CREATING VIRTUAL ENVIRONMENT (Python 3.10)${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
-if [ ! -d "venv" ]; then
-    python3.10 -m venv venv
+if [ -d "venv" ]; then
+    echo -e "${YELLOW}⚠️  venv/ exists, removing and recreating with Python 3.10...${NC}"
+    rm -rf venv
 fi
 
+python3.10 -m venv venv
 source venv/bin/activate
+
+echo -e "${GREEN}✅ Virtual environment: $(python --version)${NC}"
+
 pip install --upgrade pip setuptools wheel > /dev/null 2>&1
-echo -e "${GREEN}✅ Virtual environment ready${NC}"
+echo -e "${GREEN}✅ pip upgraded${NC}"
 
 # ==========================================
 # STEP 5: Detect CUDA version
@@ -228,20 +194,14 @@ elif [[ $CUDA_VERSION == 12.* ]]; then
 elif [[ $CUDA_VERSION == 11.8* ]]; then
     CUDA_WHEEL="cu118"
 else
-    echo -e "${YELLOW}⚠️  Unsupported CUDA $CUDA_VERSION, defaulting to cu121${NC}"
     CUDA_WHEEL="cu121"
 fi
 
-echo "CUDA wheel target: $CUDA_WHEEL"
+echo "CUDA wheel: $CUDA_WHEEL"
 
-if [ -f "requirements-gpu.txt" ]; then
-    cp requirements-gpu.txt requirements-gpu.txt.bak
-    sed -i "3s|cu[0-9]*|$CUDA_WHEEL|" requirements-gpu.txt
-    echo -e "${GREEN}✅ requirements-gpu.txt updated${NC}"
-else
-    echo -e "${RED}❌ requirements-gpu.txt not found!${NC}"
-    exit 1
-fi
+cp requirements-gpu.txt requirements-gpu.txt.bak
+sed -i "3s|cu[0-9]*|$CUDA_WHEEL|" requirements-gpu.txt
+echo -e "${GREEN}✅ requirements-gpu.txt updated${NC}"
 
 # ==========================================
 # STEP 6: Install Python dependencies
@@ -253,27 +213,26 @@ echo -e "${MAGENTA}════════════════════�
 echo -e "${YELLOW}This will take 30-60 minutes (~10-15 GB)...${NC}"
 echo -e "${CYAN}Go get some tea! 🍵${NC}\n"
 
-pip install -r requirements-gpu.txt 2>&1 | while IFS= read -r line; do
-    if [[ $line =~ "Collecting" ]] || [[ $line =~ "Downloading" ]] || [[ $line =~ "Installing" ]]; then
-        echo "$line"
-    fi
-done
+# Dùng trực tiếp không qua pipe để giữ venv active
+pip install -r requirements-gpu.txt
 
 echo -e "\n${GREEN}✅ Dependencies installed${NC}"
 
-# Verify PyTorch
-python << EOF
+# Verify PyTorch trong cùng shell
+echo "Verifying PyTorch..."
+python -c "
 import torch
-print(f'PyTorch: {torch.__version__}')
-print(f'CUDA available: {torch.cuda.is_available()}')
+print(f'✅ PyTorch: {torch.__version__}')
+print(f'✅ CUDA available: {torch.cuda.is_available()}')
 if torch.cuda.is_available():
-    print(f'GPU: {torch.cuda.get_device_name(0)}')
+    print(f'✅ GPU: {torch.cuda.get_device_name(0)}')
 else:
+    print('❌ CUDA not available!')
     exit(1)
-EOF
+"
 
 # ==========================================
-# STEP 7: Clone Hunyuan3D-2.1 from HuggingFace
+# STEP 7: Clone Hunyuan3D-2.1
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
 echo -e "${MAGENTA}[7/12] CLONING HUNYUAN3D-2.1 MODEL${NC}"
@@ -285,23 +244,14 @@ if [ -d "$HUNYUAN_DIR" ]; then
     echo -e "${GREEN}✅ hunyuan3d-2.1/ already exists, skipping${NC}"
 else
     echo -e "${YELLOW}Cloning Hunyuan3D-2.1 from HuggingFace (~8GB)...${NC}"
-    echo -e "${YELLOW}This may take 20-40 minutes...${NC}"
-
-    # Dùng git-lfs để clone model
-    sudo apt install -y git-lfs > /dev/null 2>&1
+    apt install -y git-lfs > /dev/null 2>&1
     git lfs install
 
     GIT_LFS_SKIP_SMUDGE=1 git clone https://huggingface.co/tencent/Hunyuan3D-2.1 "$HUNYUAN_DIR"
     cd "$HUNYUAN_DIR"
     git lfs pull
     cd ..
-
     echo -e "${GREEN}✅ Hunyuan3D-2.1 cloned${NC}"
-fi
-
-# Verify critical files
-if [ ! -f "$HUNYUAN_DIR/model_worker.py" ]; then
-    echo -e "${YELLOW}⚠️  model_worker.py not found in hunyuan3d-2.1${NC}"
 fi
 
 # ==========================================
@@ -426,7 +376,6 @@ LOG_LEVEL=INFO
 EOF
 
 echo -e "${GREEN}✅ .env created${NC}"
-cat ~/hunyuan3d_setup/mysql_credentials.txt > ~/hunyuan3d_setup/env_config.txt
 echo "SECRET_KEY=$SECRET_KEY" >> ~/hunyuan3d_setup/env_config.txt
 echo "EXTERNAL_URL=$EXTERNAL_URL" >> ~/hunyuan3d_setup/env_config.txt
 
@@ -437,19 +386,18 @@ echo -e "\n${MAGENTA}═══════════════════�
 echo -e "${MAGENTA}[12/12] INITIALIZING DATABASE${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
-python << 'EOF'
+python -c "
 from app.models.base_db import Base, engine
 from app.models.user import User
 from app.models.task import ModelJob
 from app.models.payment import Payment
-
 try:
     Base.metadata.create_all(bind=engine)
     print('✅ Tables created: users, model_jobs, payments')
 except Exception as e:
     print(f'❌ Error: {e}')
     exit(1)
-EOF
+"
 
 mysql -u khuongn2k3 -p$DB_PASSWORD hunyuan3d_db -e "SHOW TABLES;" 2>/dev/null
 echo -e "${GREEN}✅ Database initialized${NC}"
@@ -460,7 +408,7 @@ echo -e "${GREEN}✅ Database initialized${NC}"
 END_TIME=$(date +%s)
 ELAPSED=$((END_TIME - START_TIME))
 MINUTES=$((ELAPSED / 60))
-SECONDS=$((ELAPSED % 60))
+SECS=$((ELAPSED % 60))
 
 clear
 echo -e "${GREEN}"
@@ -473,8 +421,7 @@ cat << "EOF"
 EOF
 echo -e "${NC}"
 
-echo -e "${CYAN}⏱️  Total time: ${MINUTES}m ${SECONDS}s${NC}\n"
-
+echo -e "${CYAN}⏱️  Total time: ${MINUTES}m ${SECS}s${NC}\n"
 echo -e "${GREEN}🚀 Quick Start:${NC}"
 echo ""
 echo "  source venv/bin/activate"
@@ -483,6 +430,4 @@ echo ""
 echo -e "${CYAN}📋 API Docs: $EXTERNAL_URL/docs${NC}"
 echo ""
 echo -e "${YELLOW}⚠️  First inference slower (model loading)${NC}"
-echo -e "${YELLOW}⚠️  Subsequent: ~30-60s per image${NC}"
-echo ""
 echo -e "${CYAN}Credentials: ~/hunyuan3d_setup/${NC}"
