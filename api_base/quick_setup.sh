@@ -108,7 +108,7 @@ if ! command -v python3.10 &> /dev/null; then
     echo "Installing Python 3.10..."
     add-apt-repository ppa:deadsnakes/ppa -y > /dev/null 2>&1
     apt update -qq
-    apt install -y python3.10 python3.10-venv python3.10-dev > /dev/null 2>&1
+    apt install -y python3.10 python3.10-venv python3.10-dev python3.10-distutils > /dev/null 2>&1
 fi
 
 echo -e "${GREEN}✅ System packages installed (Python $(python3.10 --version))${NC}"
@@ -169,6 +169,7 @@ echo -e "${MAGENTA}════════════════════�
 
 if [ -d "venv" ]; then
     echo -e "${YELLOW}⚠️  venv/ exists, removing and recreating with Python 3.10...${NC}"
+    deactivate 2>/dev/null || true
     rm -rf venv
 fi
 
@@ -254,14 +255,14 @@ else
 fi
 
 # ✅ FIX: Clone code files từ GitHub (model_worker.py, hy3dshape, v.v.)
-echo -e "${YELLOW}Cloning Hunyuan3D-2 code từ GitHub...${NC}"
+echo -e "${YELLOW}Cloning Hunyuan3D-2.1 code từ GitHub...${NC}"
 GITHUB_CODE_DIR="/tmp/hunyuan3d-code"
 
 if [ -d "$GITHUB_CODE_DIR" ]; then
     rm -rf "$GITHUB_CODE_DIR"
 fi
 
-git clone --depth=1 https://github.com/Tencent/Hunyuan3D-2.git "$GITHUB_CODE_DIR"
+git clone --depth=1 https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1.git "$GITHUB_CODE_DIR"
 
 echo "Copying code files into hunyuan3d-2.1/..."
 cp "$GITHUB_CODE_DIR/model_worker.py"     "$HUNYUAN_DIR/"
