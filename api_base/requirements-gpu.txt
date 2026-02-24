@@ -1,15 +1,16 @@
---index-url https://download.pytorch.org/whl/cu121
---extra-index-url https://mirrors.cloud.tencent.com/pypi/simple/
+--extra-index-url https://download.pytorch.org/whl/cu121
 --extra-index-url https://mirrors.aliyun.com/pypi/simple/
+--extra-index-url https://mirrors.cloud.tencent.com/pypi/simple/
 
 # =========================================
 # PYTORCH GPU (CUDA 12.1) - CRITICAL!
 # =========================================
 # Change cu121 to cu118/cu124 based on your GPU's CUDA version
 # Check with: nvidia-smi
-torch==2.0.1+cu121
-torchvision==0.15.2+cu121
-torchaudio==2.0.2+cu121
+
+torch==2.1.2+cu121
+torchvision==0.16.2+cu121
+torchaudio==2.1.2+cu121
 
 # =========================================
 # BUILD TOOLS
@@ -29,7 +30,6 @@ safetensors==0.4.4
 timm
 torchdiffeq
 torchmetrics==1.6.0
-
 
 # =========================================
 # SCIENTIFIC COMPUTING
@@ -73,7 +73,8 @@ configargparse==1.7
 gradio==5.33.0
 fastapi==0.115.12
 uvicorn==0.34.3
-pydantic[email]==2.10.6
+pydantic==2.10.6
+email-validator==2.1.0
 
 # =========================================
 # UTILITIES
@@ -90,18 +91,50 @@ onnxruntime==1.16.3
 # =========================================
 # DISTRIBUTED TRAINING (Linux only)
 # =========================================
-deepspeed
+# deepspeed  # Uncomment on Linux with CUDA
 
 # =========================================
 # BLENDER (Optional - for advanced mesh processing)
 # =========================================
-#bpy==3.6.0
+# bpy==3.6.0  # Very large, only install if needed
 
+# =========================================
+# API & DATABASE
+# =========================================
 python-dotenv==1.0.1
 pymysql==1.1.1
+sqlalchemy==2.0.25
+alembic==1.13.1
 cryptography==43.0.0
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 python-multipart==0.0.18
 Pillow==10.4.0
-sqlalchemy
+pydantic-settings==2.1.0
+requests
+httpx
+
+# =========================================
+# TESTING & CODE QUALITY
+# =========================================
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+black==23.12.1
+flake8==7.0.0
+isort==5.13.2
+ipython==8.19.0
+
+# =========================================
+# NOTES
+# =========================================
+# Total size: ~15-20 GB with CUDA
+# Installation time: 30-60 minutes
+# 
+# For Windows:
+# - deepspeed may fail (commented out)
+# - bpy is optional (3GB+)
+# 
+# For production deployment:
+# - Use this file for GPU servers
+# - Use requirements-cpu.txt for API-only servers
