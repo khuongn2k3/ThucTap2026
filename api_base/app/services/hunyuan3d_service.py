@@ -1,34 +1,44 @@
 """
-Hunyuan3D Service - With Database Integration
+Hunyuan3D Service - With Database Integration (FIXED)
 """
 import os
 import sys
 import uuid
 import base64
 import asyncio
+import shutil
 from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+HUNYUAN_DIR = BASE_DIR / "hunyuan3d-2.1"
+
+# ✅ Add both paths for nested hy3dshape/hy3dshape structure
+if str(HUNYUAN_DIR) not in sys.path:
+    sys.path.insert(0, str(HUNYUAN_DIR))
+
+# ✅ Add nested path for hy3dshape.hy3dshape imports
+nested_hy3dshape = HUNYUAN_DIR / "hy3dshape" / "hy3dshape"
+if nested_hy3dshape.exists() and str(nested_hy3dshape) not in sys.path:
+    sys.path.insert(0, str(nested_hy3dshape))
+    print(f"✅ Added nested hy3dshape path: {nested_hy3dshape}")
+
 from typing import Optional, Dict, Any
 from io import BytesIO
 from PIL import Image
 from sqlalchemy.orm import Session
 
-# Add Hunyuan3D paths
-HUNYUAN3D_PATH = Path(__file__).parent.parent.parent / "hunyuan3d-2.1"
-sys.path.insert(0, str(HUNYUAN3D_PATH))                  # ← ROOT path (model_worker.py here)
-sys.path.insert(0, str(HUNYUAN3D_PATH / "hy3dshape"))
-sys.path.insert(0, str(HUNYUAN3D_PATH / "hy3dpaint"))
-
 from app.config import settings
 from app.models.task import ModelJob
 
-# Import after path setup
 try:
     from model_worker import ModelWorker
     from api_models import GenerationRequest
-    print("✅ Hunyuan3D modules imported successfully!")
+    print(f"✅ Hunyuan3D modules imported successfully from {HUNYUAN_DIR}")
     HUNYUAN3D_AVAILABLE = True
 except ImportError as e:
     print(f"⚠️ Warning: Could not import Hunyuan3D modules: {e}")
+    print(f"   Searched in: {HUNYUAN_DIR}")
+    print(f"   Nested path: {nested_hy3dshape if nested_hy3dshape.exists() else 'not found'}")
     print("   Service will run in limited mode (API only, no 3D generation)")
     ModelWorker = None
     GenerationRequest = None
@@ -49,7 +59,7 @@ class Hunyuan3DService:
     def __init__(self):
         """Initialize the service (singleton pattern)"""
         if not self._initialized:
-            self.worker = None  # ← Removed type hint
+            self.worker = None
             self.task_cache: Dict[str, Dict[str, Any]] = {}
             self._initialized = True
             print("🎨 Hunyuan3D Service initialized (singleton)")
@@ -57,15 +67,18 @@ class Hunyuan3DService:
     async def initialize_worker(self):
         """Initialize the model worker"""
         if not HUNYUAN3D_AVAILABLE:
-            print("⚠️ Cannot initialize worker: Hunyuan3D modules not available")
-            print("   Install dependencies: pip install -r requirements-dev.txt")
-            return
+            raise RuntimeError(
+                "Cannot initialize worker: Hunyuan3D modules not available. "
+                f"Please check if model files exist in {HUNYUAN_DIR}"
+            )
         
         if self.worker is not None:
             print("✅ Worker already initialized")
             return
         
         print("🚀 Initializing Hunyuan3D model worker...")
+        print(f"   Model path: {HUNYUAN_DIR}")
+        print(f"   Device: {settings.HUNYUAN3D_DEVICE}")
         
         # Create save directory
         save_dir = Path(settings.DOWNLOAD_DIR) / "hunyuan3d_cache"
@@ -81,12 +94,12 @@ class Hunyuan3DService:
         
         print("✅ Hunyuan3D worker ready!")
     
-    def _create_worker(self, save_dir: str):  # ← Removed type hint
+    def _create_worker(self, save_dir: str):
         """Create worker instance (runs in thread pool)"""
         if not HUNYUAN3D_AVAILABLE or ModelWorker is None:
             raise ImportError(
                 "ModelWorker not available. "
-                "Please install dependencies: pip install -r requirements-dev.txt"
+                f"Please check if model files exist in {HUNYUAN_DIR}"
             )
         
         return ModelWorker(
@@ -126,14 +139,14 @@ class Hunyuan3DService:
         if not HUNYUAN3D_AVAILABLE:
             raise ImportError(
                 "Hunyuan3D modules not available. "
-                "Please install dependencies: pip install -r requirements-dev.txt"
+                f"Please check if model files exist in {HUNYUAN_DIR}"
             )
         
         # Ensure worker is initialized
         if self.worker is None:
             await self.initialize_worker()
         
-        # Generate unique job ID (matching your DB field name)
+        # Generate unique job ID
         job_id = str(uuid.uuid4())
         
         # Create DB record with status='pending'
@@ -149,7 +162,7 @@ class Hunyuan3DService:
         
         print(f"✅ Created job {job_id} in database")
         
-        # Cache in memory for faster lookups (optional)
+        # Cache in memory for faster lookups
         self.task_cache[job_id] = {
             "status": "pending",
             "user_id": user_id,
@@ -206,14 +219,23 @@ class Hunyuan3DService:
             
             print(f"✅ Generated model: {file_path}")
             
-            # Generate output URL (adjust to your file serving logic)
-            # Assuming you serve files from /download/{job_id}.glb
-            output_model_url = f"{settings.EXTERNAL_URL}/download/{job_id}.glb"
+            # Generate output URL
+            output_model_url = f"{settings.EXTERNAL_URL}/api/v1/download/{job_id}.glb"
             
-            # Copy file to download directory with job_id name
+            # ✅ Use shutil.move instead of os.rename (cross-device safe)
             download_path = Path(settings.DOWNLOAD_DIR) / f"{job_id}.glb"
-            import os
-            os.rename(file_path, download_path)
+            download_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            try:
+                shutil.move(str(file_path), str(download_path))
+                print(f"✅ Moved file to: {download_path}")
+            except Exception as e:
+                print(f"⚠️ Move failed, trying copy: {e}")
+                shutil.copy2(str(file_path), str(download_path))
+                try:
+                    Path(file_path).unlink()
+                except:
+                    pass
             
             # Update DB: status='completed', output_model_url
             job = db.query(ModelJob).filter(ModelJob.job_id == job_id).first()
@@ -230,6 +252,8 @@ class Hunyuan3DService:
             
         except Exception as e:
             print(f"❌ Job {job_id} failed: {str(e)}")
+            import traceback
+            traceback.print_exc()
             
             # Update DB: status='failed', error_message
             job = db.query(ModelJob).filter(ModelJob.job_id == job_id).first()
@@ -244,26 +268,17 @@ class Hunyuan3DService:
                 self.task_cache[job_id]["error"] = str(e)
         finally:
             db.close()
+    
     async def get_job_status(
         self, 
         db: Session, 
         job_id: str
     ) -> Dict[str, Any]:
-        """
-        Get status of a generation job from database
-        
-        Args:
-            db: Database session
-            job_id: Job ID to query
-            
-        Returns:
-            Dict with job status and details
-        """
+        """Get status of a generation job from database"""
         # Try cache first (faster)
         if job_id in self.task_cache:
             cache_status = self.task_cache[job_id]["status"]
             if cache_status in ["pending", "processing"]:
-                # Still processing, return cached status
                 return {
                     "job_id": job_id,
                     "status": cache_status
@@ -274,8 +289,9 @@ class Hunyuan3DService:
         
         if not job:
             return {
+                "job_id": job_id,
                 "status": "not_found",
-                "error": "Job ID not found"
+                "error_message": "Job ID not found"
             }
         
         response = {
@@ -300,18 +316,7 @@ class Hunyuan3DService:
         limit: int = 50,
         offset: int = 0
     ) -> list:
-        """
-        Get all jobs for a user
-        
-        Args:
-            db: Database session
-            user_id: User ID
-            limit: Max number of jobs to return
-            offset: Pagination offset
-            
-        Returns:
-            List of jobs
-        """
+        """Get all jobs for a user"""
         jobs = db.query(ModelJob)\
             .filter(ModelJob.user_id == user_id)\
             .order_by(ModelJob.created_at.desc())\
@@ -335,18 +340,7 @@ class Hunyuan3DService:
         job_id: str,
         user_id: Optional[int] = None
     ) -> Dict[str, Any]:
-        """
-        Delete a job and its files
-        
-        Args:
-            db: Database session
-            job_id: Job ID to delete
-            user_id: Optional user ID for authorization check
-            
-        Returns:
-            Dict with success status
-        """
-        # Query job
+        """Delete a job and its files"""
         query = db.query(ModelJob).filter(ModelJob.job_id == job_id)
         if user_id:
             query = query.filter(ModelJob.user_id == user_id)
@@ -367,7 +361,7 @@ class Hunyuan3DService:
                     file_path.unlink()
                     print(f"🗑️  Deleted file: {file_path}")
                 except Exception as e:
-                    print(f"Failed to delete file: {e}")
+                    print(f"⚠️ Failed to delete file: {e}")
         
         # Delete from database
         db.delete(job)
@@ -387,43 +381,37 @@ class Hunyuan3DService:
         db: Session,
         max_age_hours: int = 24
     ):
-        """
-        Clean up old completed/failed jobs
-        
-        Args:
-            db: Database session
-            max_age_hours: Delete jobs older than this many hours
-        """
+        """Clean up old completed/failed jobs"""
         from datetime import datetime, timedelta
         
         cutoff_time = datetime.now() - timedelta(hours=max_age_hours)
         
-        # Query old jobs
         old_jobs = db.query(ModelJob)\
             .filter(ModelJob.status.in_(['completed', 'failed']))\
             .filter(ModelJob.created_at < cutoff_time)\
             .all()
         
+        deleted_count = 0
         for job in old_jobs:
-            # Delete file
             file_path = Path(settings.DOWNLOAD_DIR) / f"{job.job_id}.glb"
             if file_path.exists():
                 try:
                     file_path.unlink()
+                    deleted_count += 1
                 except Exception as e:
-                    print(f"Failed to delete {file_path}: {e}")
+                    print(f"⚠️ Failed to delete {file_path}: {e}")
             
-            # Delete from DB
             db.delete(job)
             
-            # Remove from cache
             if job.job_id in self.task_cache:
                 del self.task_cache[job.job_id]
         
         db.commit()
         
-        if old_jobs:
-            print(f"🧹 Cleaned up {len(old_jobs)} old jobs")
+        if deleted_count > 0:
+            print(f"🧹 Cleaned up {deleted_count} old jobs")
+        
+        return deleted_count
     
     def get_worker_status(self) -> Dict[str, Any]:
         """Get worker status"""
@@ -433,10 +421,10 @@ class Hunyuan3DService:
                 "device": settings.HUNYUAN3D_DEVICE,
                 "queue_length": 0,
                 "active_jobs": 0,
-                "hunyuan3d_available": HUNYUAN3D_AVAILABLE
+                "hunyuan3d_available": HUNYUAN3D_AVAILABLE,
+                "model_path": str(HUNYUAN_DIR)
             }
         
-        # Count active jobs from cache
         active_jobs = len([
             t for t in self.task_cache.values() 
             if t["status"] in ["pending", "processing"]
@@ -447,7 +435,8 @@ class Hunyuan3DService:
             "device": settings.HUNYUAN3D_DEVICE,
             "queue_length": self.worker.get_queue_length() if hasattr(self.worker, 'get_queue_length') else 0,
             "active_jobs": active_jobs,
-            "hunyuan3d_available": HUNYUAN3D_AVAILABLE
+            "hunyuan3d_available": HUNYUAN3D_AVAILABLE,
+            "model_path": str(HUNYUAN_DIR)
         }
 
 

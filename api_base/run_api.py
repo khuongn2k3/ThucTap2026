@@ -1,9 +1,3 @@
-"""
-Script to run FastAPI server.
-
-Usage:
-    python run_api.py
-"""
 
 import uvicorn
 from app.config import settings

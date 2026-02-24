@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==========================================
-# 🚀 HUNYUAN3D GPU SERVER - FULL AUTO SETUP
+# 🚀 HUNYUAN3D GPU SERVER - FULL AUTO SETUP (FIXED)
 # ==========================================
 
 set -e
@@ -12,8 +12,8 @@ MAGENTA='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-GOOGLE_CLIENT_ID=""
-GOOGLE_CLIENT_SECRET=""
+GOOGLE_CLIENT_ID="YOUR_GOOGLE_CLIENT_ID_HERE"
+GOOGLE_CLIENT_SECRET="YOUR_GOOGLE_CLIENT_SECRET_HERE"
 
 clear
 echo -e "${CYAN}"
@@ -238,6 +238,7 @@ echo -e "\n${MAGENTA}═══════════════════�
 echo -e "${MAGENTA}[7/12] CLONING HUNYUAN3D-2.1 MODEL + CODE${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
+# ✅ FIX: Consistent directory name with dash
 HUNYUAN_DIR="./hunyuan3d-2.1"
 
 if [ -d "$HUNYUAN_DIR" ]; then
@@ -254,8 +255,8 @@ else
     echo -e "${GREEN}✅ Hunyuan3D-2.1 model cloned${NC}"
 fi
 
-# ✅ FIX: Clone code files từ GitHub (model_worker.py, hy3dshape, v.v.)
-echo -e "${YELLOW}Cloning Hunyuan3D-2.1 code từ GitHub...${NC}"
+# ✅ FIX: Clone code files from GitHub
+echo -e "${YELLOW}Cloning Hunyuan3D-2.1 code from GitHub...${NC}"
 GITHUB_CODE_DIR="/tmp/hunyuan3d-code"
 
 if [ -d "$GITHUB_CODE_DIR" ]; then
@@ -272,7 +273,7 @@ cp "$GITHUB_CODE_DIR/constants.py"        "$HUNYUAN_DIR/"
 cp "$GITHUB_CODE_DIR/logger_utils.py"     "$HUNYUAN_DIR/"
 cp "$GITHUB_CODE_DIR/torchvision_fix.py"  "$HUNYUAN_DIR/"
 
-# Copy hy3dshape nếu chưa có
+# Copy hy3dshape if not exists
 if [ ! -d "$HUNYUAN_DIR/hy3dshape" ]; then
     cp -r "$GITHUB_CODE_DIR/hy3dshape" "$HUNYUAN_DIR/"
     echo -e "${GREEN}✅ hy3dshape copied${NC}"
@@ -285,15 +286,58 @@ rm -rf "$GITHUB_CODE_DIR"
 
 echo -e "${GREEN}✅ Code files copied successfully${NC}"
 
-# Verify
+# ✅ FIX: Create __init__.py for nested hy3dshape import
+echo -e "${YELLOW}Creating __init__.py for hy3dshape...${NC}"
+cat > "$HUNYUAN_DIR/hy3dshape/__init__.py" <<'INITPY'
+from .hy3dshape.pipelines import Hunyuan3DDiTPipeline, Hunyuan3DDiTFlowMatchingPipeline
+
+__all__ = ["Hunyuan3DDiTPipeline", "Hunyuan3DDiTFlowMatchingPipeline"]
+INITPY
+
+echo -e "${GREEN}✅ hy3dshape/__init__.py created${NC}"
+
+# ✅ FIX: Add PYTHONPATH to venv activation script (persistent)
+VENV_ACTIVATE="venv/bin/activate"
+HUNYUAN_ABS_PATH=$(realpath "$HUNYUAN_DIR")
+
+if ! grep -q "PYTHONPATH.*hunyuan3d-2.1" "$VENV_ACTIVATE"; then
+    echo "" >> "$VENV_ACTIVATE"
+    echo "# Hunyuan3D path" >> "$VENV_ACTIVATE"
+    echo "export PYTHONPATH=\"$HUNYUAN_ABS_PATH:\$PYTHONPATH\"" >> "$VENV_ACTIVATE"
+    echo -e "${GREEN}✅ PYTHONPATH added to venv activation${NC}"
+fi
+
+# Set for current session
+export PYTHONPATH="$HUNYUAN_ABS_PATH:$PYTHONPATH"
+echo -e "${GREEN}✅ PYTHONPATH set: $PYTHONPATH${NC}"
+
+# Verify model_worker import
+echo -e "${YELLOW}Verifying model_worker import...${NC}"
 python -c "
 import sys
-sys.path.insert(0, '$HUNYUAN_DIR')
-sys.path.insert(0, '$HUNYUAN_DIR/hy3dshape')
-sys.path.insert(0, '$HUNYUAN_DIR/hy3dpaint')
-import model_worker
-print('✅ model_worker import OK')
-" && echo -e "${GREEN}✅ model_worker verified!${NC}" || echo -e "${RED}❌ model_worker import failed!${NC}"
+print('Python path:')
+for p in sys.path:
+    print(f'  {p}')
+print()
+try:
+    from model_worker import ModelWorker
+    print('✅ model_worker import OK')
+except ImportError as e:
+    print(f'❌ model_worker import failed: {e}')
+    exit(1)
+"
+
+# ✅ NEW: Verify Hunyuan3D import
+echo -e "${YELLOW}Verifying Hunyuan3D modules...${NC}"
+python -c "
+try:
+    from hy3dshape import Hunyuan3DDiTFlowMatchingPipeline
+    print('✅ Hunyuan3DDiTFlowMatchingPipeline import OK')
+except ImportError as e:
+    print(f'❌ Hunyuan3D import failed: {e}')
+    print('⚠️  This may cause issues during model generation.')
+    exit(1)
+"
 
 # ==========================================
 # STEP 8: Compile CUDA modules
@@ -472,4 +516,6 @@ echo ""
 echo -e "${CYAN}📋 API Docs: $EXTERNAL_URL/docs${NC}"
 echo ""
 echo -e "${YELLOW}⚠️  First inference slower (model loading)${NC}"
-echo -e "${CYAN}Credentials: ~/hunyuan3d_setup/${NC}"
+echo -e "${CYAN}📄 Credentials: ~/hunyuan3d_setup/${NC}"
+echo ""
+echo -e "${GREEN}✅ All checks passed. Ready to run!${NC}"

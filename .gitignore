@@ -1,2 +1,27 @@
-"*.zip" 
-"node_modules/" 
+# Node modules
+node_modules/
+frontend-react/node_modules/
+
+# Archives
+*.zip
+
+# Temp folders
+git/
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/

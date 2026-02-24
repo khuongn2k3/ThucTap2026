@@ -1,15 +1,15 @@
+--index-url https://download.pytorch.org/whl/cu121
 --extra-index-url https://mirrors.cloud.tencent.com/pypi/simple/
 --extra-index-url https://mirrors.aliyun.com/pypi/simple/
---extra-index-url https://download.pytorch.org/whl/cu121
 
 # =========================================
 # PYTORCH GPU (CUDA 12.1) - CRITICAL!
 # =========================================
 # Change cu121 to cu118/cu124 based on your GPU's CUDA version
 # Check with: nvidia-smi
-torch==2.5.1
-torchvision==0.20.1
-torchaudio==2.5.1
+torch==2.0.1+cu121
+torchvision==0.15.2+cu121
+torchaudio==2.0.2+cu121
 
 # =========================================
 # BUILD TOOLS
@@ -29,6 +29,7 @@ safetensors==0.4.4
 timm
 torchdiffeq
 torchmetrics==1.6.0
+
 
 # =========================================
 # SCIENTIFIC COMPUTING
