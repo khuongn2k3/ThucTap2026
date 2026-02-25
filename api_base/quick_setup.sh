@@ -203,12 +203,11 @@ echo "CUDA wheel: $CUDA_WHEEL"
 
 cp requirements-gpu.txt requirements-gpu.txt.bak
 
-# Update PyTorch to 2.5.1 + CUDA version
-sed -i "s|torch==.*+cu[0-9]*|torch==2.5.1+$CUDA_WHEEL|" requirements-gpu.txt
-sed -i "s|torchvision==.*+cu[0-9]*|torchvision==0.20.1+$CUDA_WHEEL|" requirements-gpu.txt
-sed -i "s|torchaudio==.*+cu[0-9]*|torchaudio==2.5.1+$CUDA_WHEEL|" requirements-gpu.txt
-
-echo -e "${GREEN}✅ PyTorch upgraded to 2.5.1 + $CUDA_WHEEL${NC}"
+# Skip torch (already installed in base image)
+sed -i 's/^torch==/#torch==/' requirements-gpu.txt
+sed -i 's/^torchvision==/#torchvision==/' requirements-gpu.txt
+sed -i 's/^torchaudio==/#torchaudio==/' requirements-gpu.txt
+echo -e "${GREEN}✅ Skipping torch (already have 2.5.1+cu124)${NC}"
 
 # ==========================================
 # STEP 6: Install Python dependencies
