@@ -18,7 +18,7 @@ class Settings:
     DATABASE_HOST: str = os.getenv("DATABASE_HOST", "localhost")
     DATABASE_PORT: int = int(os.getenv("DATABASE_PORT", "3306"))
     DATABASE_USER: str = os.getenv("DATABASE_USER", "khuongn2k3")
-    DATABASE_PASSWORD: str = os.getenv("DATABASE_PASSWORD", "123123")
+    DATABASE_PASSWORD: str = os.getenv("DATABASE_PASSWORD", "")
     DATABASE_NAME: str = os.getenv("DATABASE_NAME", "hunyuan3d_db")
     
     # =========================================

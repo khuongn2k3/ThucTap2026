@@ -589,14 +589,14 @@ ACCESS_TOKEN_EXPIRE_MINUTES=43200
 # =========================================
 # 🌐 CORS CONFIG
 # =========================================
-ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173,$EXTERNAL_URL
 
 # =========================================
 # 🔐 GOOGLE OAUTH
 # =========================================
 GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET
-GOOGLE_REDIRECT_URI=http://localhost:8000/api/v1/auth/google/callback
+GOOGLE_REDIRECT_URI=$EXTERNAL_URL/api/v1/auth/google/callback
 
 # =========================================
 # 💳 PAYMENT (OPTIONAL)
