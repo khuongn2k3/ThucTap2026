@@ -281,6 +281,14 @@ rm -rf "$GITHUB_CODE_DIR"
 
 echo -e "${GREEN}✅ Code files copied successfully${NC}"
 
+# ✅ FIX: bpy optional import
+echo -e "${YELLOW}Fixing bpy optional imports...${NC}"
+sed -i 's/^import bpy$/try:\n    import bpy\nexcept ImportError:\n    bpy = None/' \
+    "$HUNYUAN_DIR/hy3dpaint/DifferentiableRenderer/mesh_utils.py"
+sed -i 's/^import bpy$/try:\n    import bpy\nexcept ImportError:\n    bpy = None/' \
+    "$HUNYUAN_DIR/hy3dshape/tools/render/render.py"
+echo -e "${GREEN}✅ bpy imports fixed${NC}"
+
 # ✅ FIX: Rename rembg.py to avoid circular import
 echo -e "${YELLOW}Renaming rembg.py to avoid circular import...${NC}"
 if [ -f "$HUNYUAN_DIR/hy3dshape/hy3dshape/rembg.py" ]; then
