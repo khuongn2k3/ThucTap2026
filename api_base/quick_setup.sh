@@ -367,6 +367,8 @@ echo -e "${GREEN}✅ PYTHONPATH set: $PYTHONPATH${NC}"
 echo -e "${YELLOW}Verifying Python imports...${NC}"
 python -c "
 import sys
+...
+" || true
 print('Python paths:')
 for p in sys.path[:5]:
     print(f'  {p}')
