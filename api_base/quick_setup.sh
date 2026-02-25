@@ -562,7 +562,8 @@ echo -e "${MAGENTA}[11/12] GENERATING .ENV FILE${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 SECRET_KEY=$(openssl rand -hex 32)
-DB_PASSWORD=$(grep "Password:" ~/hunyuan3d_setup/mysql_credentials.txt | awk '{print $2}')
+DB_PASSWORD=$(grep "^Password:" ~/hunyuan3d_setup/mysql_credentials.txt | awk '{print $2}')
+export DB_PASSWORD
 
 cat > .env <<EOF
 # =========================================
@@ -645,7 +646,7 @@ except Exception as e:
     print(f'❌ Error: {e}')
     exit(1)
 "
-
+export DB_PASSWORD=$(grep "^Password:" ~/hunyuan3d_setup/mysql_credentials.txt | awk '{print $2}')
 mysql -u khuongn2k3 -p$DB_PASSWORD hunyuan3d_db -e "SHOW TABLES;" 2>/dev/null
 echo -e "${GREEN}✅ Database initialized${NC}"
 
