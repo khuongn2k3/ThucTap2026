@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==========================================
-# 🚀 HUNYUAN3D GPU SERVER - FULL AUTO SETUP (FIXED)
+# 🚀 HUNYUAN3D GPU SERVER - FULL AUTO SETUP (FIXED v2)
 # ==========================================
 
 set -e
@@ -126,7 +126,8 @@ DB_PASSWORD=$(openssl rand -base64 16 | tr -d "=+/" | cut -c1-16)
 
 mysql <<EOSQL
 CREATE DATABASE IF NOT EXISTS hunyuan3d_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'khuongn2k3'@'localhost' IDENTIFIED WITH mysql_native_password BY '$DB_PASSWORD';
+DROP USER IF EXISTS 'khuongn2k3'@'localhost';
+CREATE USER 'khuongn2k3'@'localhost' IDENTIFIED WITH mysql_native_password BY '$DB_PASSWORD';
 GRANT ALL PRIVILEGES ON hunyuan3d_db.* TO 'khuongn2k3'@'localhost';
 FLUSH PRIVILEGES;
 EOSQL
@@ -201,8 +202,13 @@ fi
 echo "CUDA wheel: $CUDA_WHEEL"
 
 cp requirements-gpu.txt requirements-gpu.txt.bak
-sed -i "3s|cu[0-9]*|$CUDA_WHEEL|" requirements-gpu.txt
-echo -e "${GREEN}✅ requirements-gpu.txt updated${NC}"
+
+# Update PyTorch to 2.5.1 + CUDA version
+sed -i "s|torch==.*+cu[0-9]*|torch==2.5.1+$CUDA_WHEEL|" requirements-gpu.txt
+sed -i "s|torchvision==.*+cu[0-9]*|torchvision==0.20.1+$CUDA_WHEEL|" requirements-gpu.txt
+sed -i "s|torchaudio==.*+cu[0-9]*|torchaudio==2.5.1+$CUDA_WHEEL|" requirements-gpu.txt
+
+echo -e "${GREEN}✅ PyTorch upgraded to 2.5.1 + $CUDA_WHEEL${NC}"
 
 # ==========================================
 # STEP 6: Install Python dependencies
@@ -238,7 +244,6 @@ echo -e "\n${MAGENTA}═══════════════════�
 echo -e "${MAGENTA}[7/12] CLONING HUNYUAN3D-2.1 MODEL + CODE${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
-# ✅ FIX: Consistent directory name with dash
 HUNYUAN_DIR="./hunyuan3d-2.1"
 
 if [ -d "$HUNYUAN_DIR" ]; then
@@ -255,7 +260,7 @@ else
     echo -e "${GREEN}✅ Hunyuan3D-2.1 model cloned${NC}"
 fi
 
-# ✅ FIX: Clone code files from GitHub
+# ✅ Clone code files from GitHub
 echo -e "${YELLOW}Cloning Hunyuan3D-2.1 code from GitHub...${NC}"
 GITHUB_CODE_DIR="/tmp/hunyuan3d-code"
 
@@ -266,79 +271,125 @@ fi
 git clone --depth=1 https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1.git "$GITHUB_CODE_DIR"
 
 echo "Copying code files into hunyuan3d-2.1/..."
-cp "$GITHUB_CODE_DIR/model_worker.py"     "$HUNYUAN_DIR/"
-cp "$GITHUB_CODE_DIR/api_models.py"       "$HUNYUAN_DIR/"
-cp "$GITHUB_CODE_DIR/api_server.py"       "$HUNYUAN_DIR/"
-cp "$GITHUB_CODE_DIR/constants.py"        "$HUNYUAN_DIR/"
-cp "$GITHUB_CODE_DIR/logger_utils.py"     "$HUNYUAN_DIR/"
-cp "$GITHUB_CODE_DIR/torchvision_fix.py"  "$HUNYUAN_DIR/"
 
-# Copy hy3dshape if not exists
-if [ ! -d "$HUNYUAN_DIR/hy3dshape" ]; then
-    cp -r "$GITHUB_CODE_DIR/hy3dshape" "$HUNYUAN_DIR/"
-    echo -e "${GREEN}✅ hy3dshape copied${NC}"
-else
-    echo -e "${GREEN}✅ hy3dshape already exists${NC}"
-fi
+# ✅ Copy TOÀN BỘ code (force overwrite to get latest)
+echo -e "${YELLOW}Copying all code files (overwriting)...${NC}"
+cp -rf "$GITHUB_CODE_DIR"/* "$HUNYUAN_DIR/" 2>/dev/null || true
+echo -e "${GREEN}✅ All code files copied${NC}"
 
 # Cleanup
 rm -rf "$GITHUB_CODE_DIR"
 
 echo -e "${GREEN}✅ Code files copied successfully${NC}"
 
-# ✅ FIX: Create __init__.py for nested hy3dshape import
+# ✅ FIX: Rename rembg.py to avoid circular import
+echo -e "${YELLOW}Renaming rembg.py to avoid circular import...${NC}"
+if [ -f "$HUNYUAN_DIR/hy3dshape/hy3dshape/rembg.py" ]; then
+    mv "$HUNYUAN_DIR/hy3dshape/hy3dshape/rembg.py" "$HUNYUAN_DIR/hy3dshape/hy3dshape/rembg_utils.py"
+    echo -e "${GREEN}✅ rembg.py renamed to rembg_utils.py${NC}"
+else
+    echo -e "${YELLOW}⚠️  rembg.py not found or already renamed${NC}"
+fi
+
+# ✅ FIX: Create comprehensive __init__.py for nested hy3dshape import
 echo -e "${YELLOW}Creating __init__.py for hy3dshape...${NC}"
 cat > "$HUNYUAN_DIR/hy3dshape/__init__.py" <<'INITPY'
-from .hy3dshape.pipelines import Hunyuan3DDiTPipeline, Hunyuan3DDiTFlowMatchingPipeline
+# Forward all imports from nested hy3dshape to top-level
+# This makes "from hy3dshape.xxx import Y" work as expected
 
-__all__ = ["Hunyuan3DDiTPipeline", "Hunyuan3DDiTFlowMatchingPipeline"]
+import sys
+
+# Import and re-export main modules
+from .hy3dshape.pipelines import Hunyuan3DDiTPipeline, Hunyuan3DDiTFlowMatchingPipeline
+from .hy3dshape import rembg_utils as rembg
+from .hy3dshape import preprocessors
+from .hy3dshape import postprocessors
+from .hy3dshape import schedulers
+from .hy3dshape import surface_loaders
+from .hy3dshape import utils
+from .hy3dshape import models
+
+# Make nested modules accessible as hy3dshape.module_name
+sys.modules['hy3dshape.rembg'] = rembg
+sys.modules['hy3dshape.preprocessors'] = preprocessors
+sys.modules['hy3dshape.postprocessors'] = postprocessors
+sys.modules['hy3dshape.schedulers'] = schedulers
+sys.modules['hy3dshape.surface_loaders'] = surface_loaders
+sys.modules['hy3dshape.utils'] = utils
+sys.modules['hy3dshape.models'] = models
+
+__all__ = [
+    "Hunyuan3DDiTPipeline",
+    "Hunyuan3DDiTFlowMatchingPipeline",
+    "rembg",
+    "preprocessors",
+    "postprocessors",
+    "schedulers",
+    "surface_loaders",
+    "utils",
+    "models"  # ← THÊM DÒNG NÀY
+]
 INITPY
 
 echo -e "${GREEN}✅ hy3dshape/__init__.py created${NC}"
 
-# ✅ FIX: Add PYTHONPATH to venv activation script (persistent)
+# ✅ Add PYTHONPATH for both hy3dshape AND hy3dpaint
 VENV_ACTIVATE="venv/bin/activate"
 HUNYUAN_ABS_PATH=$(realpath "$HUNYUAN_DIR")
+HY3DPAINT_PATH="$HUNYUAN_ABS_PATH/hy3dpaint"
+DIFF_RENDERER_PATH="$HUNYUAN_ABS_PATH/hy3dpaint/DifferentiableRenderer"
 
-if ! grep -q "PYTHONPATH.*hunyuan3d-2.1" "$VENV_ACTIVATE"; then
-    echo "" >> "$VENV_ACTIVATE"
-    echo "# Hunyuan3D path" >> "$VENV_ACTIVATE"
-    echo "export PYTHONPATH=\"$HUNYUAN_ABS_PATH:\$PYTHONPATH\"" >> "$VENV_ACTIVATE"
-    echo -e "${GREEN}✅ PYTHONPATH added to venv activation${NC}"
-fi
+# Remove old PYTHONPATH entries
+sed -i '/# Hunyuan3D/d' "$VENV_ACTIVATE"
+sed -i '/export PYTHONPATH.*hunyuan3d/d' "$VENV_ACTIVATE"
+
+# Add new comprehensive PYTHONPATH
+cat >> "$VENV_ACTIVATE" <<EOF
+
+# Hunyuan3D paths (auto-generated)
+export PYTHONPATH="$HUNYUAN_ABS_PATH:$HY3DPAINT_PATH:$DIFF_RENDERER_PATH:\$PYTHONPATH"
+EOF
+
+echo -e "${GREEN}✅ PYTHONPATH added to venv activation${NC}"
 
 # Set for current session
-export PYTHONPATH="$HUNYUAN_ABS_PATH:$PYTHONPATH"
+export PYTHONPATH="$HUNYUAN_ABS_PATH:$HY3DPAINT_PATH:$DIFF_RENDERER_PATH:$PYTHONPATH"
 echo -e "${GREEN}✅ PYTHONPATH set: $PYTHONPATH${NC}"
 
-# Verify model_worker import
-echo -e "${YELLOW}Verifying model_worker import...${NC}"
+# Verify imports
+echo -e "${YELLOW}Verifying Python imports...${NC}"
 python -c "
 import sys
-print('Python path:')
-for p in sys.path:
+print('Python paths:')
+for p in sys.path[:5]:
     print(f'  {p}')
+print('  ...')
 print()
+
+# Test 1: model_worker
 try:
     from model_worker import ModelWorker
     print('✅ model_worker import OK')
 except ImportError as e:
     print(f'❌ model_worker import failed: {e}')
     exit(1)
-"
 
-# ✅ NEW: Verify Hunyuan3D import
-echo -e "${YELLOW}Verifying Hunyuan3D modules...${NC}"
-python -c "
+# Test 2: Hunyuan3D Pipeline
 try:
     from hy3dshape import Hunyuan3DDiTFlowMatchingPipeline
     print('✅ Hunyuan3DDiTFlowMatchingPipeline import OK')
 except ImportError as e:
-    print(f'❌ Hunyuan3D import failed: {e}')
-    print('⚠️  This may cause issues during model generation.')
+    print(f'❌ Pipeline import failed: {e}')
     exit(1)
-"
 
+# Test 3: textureGenPipeline
+try:
+    from textureGenPipeline import Hunyuan3DPaintPipeline
+    print('✅ textureGenPipeline import OK')
+except ImportError as e:
+    print(f'⚠️  textureGenPipeline import failed: {e}')
+    print('   (Will be available after CUDA compilation)')
+"
 # ==========================================
 # STEP 8: Compile CUDA modules
 # ==========================================
@@ -346,13 +397,24 @@ echo -e "\n${MAGENTA}═══════════════════�
 echo -e "${MAGENTA}[8/12] COMPILING CUDA MODULES${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
+# Install dependencies for compilation
+echo "Installing fake-bpy-module..."
+pip install fake-bpy-module-latest > /dev/null 2>&1
+echo -e "${GREEN}✅ fake-bpy-module installed${NC}"
+
+echo "Adjusting setuptools version..."
+pip install setuptools==69.5.1 > /dev/null 2>&1
+echo -e "${GREEN}✅ setuptools adjusted${NC}"
+
 if [ -d "hunyuan3d-2.1/hy3dpaint/custom_rasterizer" ]; then
     echo "Compiling custom_rasterizer..."
     cd hunyuan3d-2.1/hy3dpaint/custom_rasterizer
-    pip install -e . > /tmp/rasterizer_build.log 2>&1 && \
+    pip install -e . --no-build-isolation > /tmp/rasterizer_build.log 2>&1 && \
         echo -e "${GREEN}✅ custom_rasterizer compiled${NC}" || \
         echo -e "${RED}❌ Failed! Check /tmp/rasterizer_build.log${NC}"
     cd ../../..
+else
+    echo -e "${YELLOW}⚠️  custom_rasterizer not found, skipping${NC}"
 fi
 
 if [ -d "hunyuan3d-2.1/hy3dpaint/DifferentiableRenderer" ]; then
@@ -362,13 +424,49 @@ if [ -d "hunyuan3d-2.1/hy3dpaint/DifferentiableRenderer" ]; then
         echo -e "${GREEN}✅ DifferentiableRenderer compiled${NC}" || \
         echo -e "${RED}❌ Failed! Check /tmp/renderer_build.log${NC}"
     cd ../../..
+else
+    echo -e "${YELLOW}⚠️  DifferentiableRenderer not found, skipping${NC}"
 fi
 
+# Final verification
+echo -e "${YELLOW}Final verification...${NC}"
+python -c "
+try:
+    from textureGenPipeline import Hunyuan3DPaintPipeline
+    print('✅ All CUDA modules compiled successfully!')
+except ImportError as e:
+    print(f'⚠️  textureGenPipeline: {e}')
+" 2>&1 | grep -E '✅|⚠️'
+# ==========================================
+# STEP 8.5: Configure LD_LIBRARY_PATH for CUDA extensions
+# ==========================================
+echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
+echo -e "${MAGENTA}[8.5/12] CONFIGURING PYTORCH LIBRARY PATH${NC}"
+echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
+
+# Add PyTorch lib path to venv activate if not already present
+if ! grep -q "TORCH_LIB_PATH" "$VENV_ACTIVATE"; then
+    echo -e "${YELLOW}Adding LD_LIBRARY_PATH to venv...${NC}"
+    cat >> "$VENV_ACTIVATE" <<'EOF'
+
+# PyTorch C++ library path (for CUDA extensions)
+TORCH_LIB_PATH=$(python -c "import torch, os; print(os.path.join(os.path.dirname(torch.__file__), 'lib'))" 2>/dev/null)
+if [ -n "$TORCH_LIB_PATH" ]; then
+    export LD_LIBRARY_PATH="$TORCH_LIB_PATH:$LD_LIBRARY_PATH"
+fi
+EOF
+    echo -e "${GREEN}✅ LD_LIBRARY_PATH configured in venv${NC}"
+else
+    echo -e "${GREEN}✅ LD_LIBRARY_PATH already configured${NC}"
+fi
+
+# Set for current session
+export LD_LIBRARY_PATH=$(python -c "import torch, os; print(os.path.join(os.path.dirname(torch.__file__), 'lib'))" 2>/dev/null):$LD_LIBRARY_PATH
 # ==========================================
 # STEP 9: Download AI weights
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[9/12] DOWNLOADING AI WEIGHTS${NC}"
+echo -e "${MAGENTA}[9/13] DOWNLOADING AI WEIGHTS${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 WEIGHT_PATH="hunyuan3d-2.1/hy3dpaint/ckpt/RealESRGAN_x4plus.pth"
@@ -381,6 +479,62 @@ if [ ! -f "$WEIGHT_PATH" ]; then
 else
     echo -e "${GREEN}✅ Real-ESRGAN already exists${NC}"
 fi
+
+# ==========================================
+# STEP 9.5: Fix all hardcoded paths using pathlib
+# ==========================================
+echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
+echo -e "${MAGENTA}[9.5/13] FIXING ALL HARDCODED PATHS${NC}"
+echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
+
+# ✅ Part 1: Fix textureGenPipeline.py
+echo -e "${YELLOW}Fixing paths in textureGenPipeline.py...${NC}"
+TEXTURE_GEN_FILE="hunyuan3d-2.1/hy3dpaint/textureGenPipeline.py"
+
+# Add Path import after warnings import if not present
+if ! grep -q "from pathlib import Path" "$TEXTURE_GEN_FILE"; then
+    sed -i '/^import warnings/a from pathlib import Path' "$TEXTURE_GEN_FILE"
+    echo -e "${GREEN}✅ Added Path import${NC}"
+fi
+
+# Remove any existing script_dir lines in Hunyuan3DPaintConfig.__init__
+sed -i '/class Hunyuan3DPaintConfig:/,/class Hunyuan3DPaintPipeline:/ {
+    /script_dir = Path(__file__).parent.resolve()/d
+}' "$TEXTURE_GEN_FILE"
+
+# Add script_dir after self.device = "cuda"
+sed -i '/self.device = "cuda"/a\        script_dir = Path(__file__).parent.resolve()' "$TEXTURE_GEN_FILE"
+
+# Fix multiview_cfg_path to use pathlib
+sed -i 's|self\.multiview_cfg_path = "hy3dpaint/cfgs/hunyuan-paint-pbr\.yaml"|self.multiview_cfg_path = str(script_dir / "cfgs" / "hunyuan-paint-pbr.yaml")|' "$TEXTURE_GEN_FILE"
+
+# Fix realesrgan_ckpt_path to use pathlib (if still hardcoded)
+sed -i 's|self\.realesrgan_ckpt_path = "ckpt/RealESRGAN_x4plus\.pth"|self.realesrgan_ckpt_path = str(script_dir / "ckpt" / "RealESRGAN_x4plus.pth")|' "$TEXTURE_GEN_FILE"
+
+# Add dino_ckpt_path if not present
+if ! grep -q "dino_ckpt_path" "$TEXTURE_GEN_FILE"; then
+    sed -i '/self\.realesrgan_ckpt_path = str(script_dir/a\        self.dino_ckpt_path = "facebook/dinov2-large"  # HuggingFace model ID' "$TEXTURE_GEN_FILE"
+    echo -e "${GREEN}✅ Added dino_ckpt_path${NC}"
+fi
+
+echo -e "${GREEN}✅ textureGenPipeline.py paths fixed${NC}"
+
+# ✅ Part 2: Fix model_worker.py
+echo -e "${YELLOW}Removing hardcoded path overrides in model_worker.py...${NC}"
+MODEL_WORKER_FILE="hunyuan3d-2.1/model_worker.py"
+
+# Remove all hardcoded path assignments that override Hunyuan3DPaintConfig defaults
+sed -i '/conf\.realesrgan_ckpt_path = /d' "$MODEL_WORKER_FILE"
+sed -i '/conf\.multiview_cfg_path = /d' "$MODEL_WORKER_FILE"
+sed -i '/conf\.custom_pipeline = /d' "$MODEL_WORKER_FILE"
+
+echo -e "${GREEN}✅ model_worker.py hardcoded paths removed${NC}"
+
+# ✅ Part 3: Clear Python cache
+echo -e "${YELLOW}Clearing Python cache...${NC}"
+find hunyuan3d-2.1 -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+find hunyuan3d-2.1 -type f -name "*.pyc" -delete 2>/dev/null || true
+echo -e "${GREEN}✅ Python cache cleared${NC}"
 
 # ==========================================
 # STEP 10: Create directories

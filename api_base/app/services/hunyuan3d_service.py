@@ -22,6 +22,12 @@ if nested_hy3dshape.exists() and str(nested_hy3dshape) not in sys.path:
     sys.path.insert(0, str(nested_hy3dshape))
     print(f"✅ Added nested hy3dshape path: {nested_hy3dshape}")
 
+# ✅ ADD THIS BLOCK - Add hy3dpaint path for textureGenPipeline imports
+hy3dpaint_path = HUNYUAN_DIR / "hy3dpaint"
+if hy3dpaint_path.exists() and str(hy3dpaint_path) not in sys.path:
+    sys.path.insert(0, str(hy3dpaint_path))
+    print(f"✅ Added hy3dpaint path: {hy3dpaint_path}")
+
 from typing import Optional, Dict, Any
 from io import BytesIO
 from PIL import Image

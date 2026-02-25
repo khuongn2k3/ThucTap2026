@@ -8,9 +8,9 @@
 # Change cu121 to cu118/cu124 based on your GPU's CUDA version
 # Check with: nvidia-smi
 
-torch==2.1.2+cu121
-torchvision==0.16.2+cu121
-torchaudio==2.1.2+cu121
+torch==2.5.1+cu121
+torchvision==0.20.1+cu121
+torchaudio==2.5.1+cu121
 
 # =========================================
 # BUILD TOOLS
@@ -124,7 +124,7 @@ black==23.12.1
 flake8==7.0.0
 isort==5.13.2
 ipython==8.19.0
-
+setuptools==69.5.1
 # =========================================
 # NOTES
 # =========================================
