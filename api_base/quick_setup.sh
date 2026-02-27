@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==========================================
-# 🚀 HUNYUAN3D GPU SERVER - FULL AUTO SETUP (FIXED v2)
+# 🚀 HUNYUAN3D GPU SERVER - FULL AUTO SETUP (FIXED v4)
 # ==========================================
 
 set -e
@@ -334,7 +334,7 @@ __all__ = [
     "schedulers",
     "surface_loaders",
     "utils",
-    "models"  # ← THÊM DÒNG NÀY
+    "models"
 ]
 INITPY
 
@@ -369,8 +369,6 @@ echo -e "${GREEN}✅ PYTHONPATH set: $PYTHONPATH${NC}"
 echo -e "${YELLOW}Verifying Python imports...${NC}"
 python -c "
 import sys
-...
-" || true
 print('Python paths:')
 for p in sys.path[:5]:
     print(f'  {p}')
@@ -400,7 +398,8 @@ try:
 except ImportError as e:
     print(f'⚠️  textureGenPipeline import failed: {e}')
     print('   (Will be available after CUDA compilation)')
-"
+" || true
+
 # ==========================================
 # STEP 8: Compile CUDA modules
 # ==========================================
@@ -448,6 +447,7 @@ try:
 except ImportError as e:
     print(f'⚠️  textureGenPipeline: {e}')
 " 2>&1 | grep -E '✅|⚠️'
+
 # ==========================================
 # STEP 8.5: Configure LD_LIBRARY_PATH for CUDA extensions
 # ==========================================
@@ -473,11 +473,12 @@ fi
 
 # Set for current session
 export LD_LIBRARY_PATH=$(python -c "import torch, os; print(os.path.join(os.path.dirname(torch.__file__), 'lib'))" 2>/dev/null):$LD_LIBRARY_PATH
+
 # ==========================================
 # STEP 9: Download AI weights
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[9/13] DOWNLOADING AI WEIGHTS${NC}"
+echo -e "${MAGENTA}[9/12] DOWNLOADING AI WEIGHTS${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 WEIGHT_PATH="hunyuan3d-2.1/hy3dpaint/ckpt/RealESRGAN_x4plus.pth"
@@ -495,7 +496,7 @@ fi
 # STEP 9.5: Fix all hardcoded paths using pathlib
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[9.5/13] FIXING ALL HARDCODED PATHS${NC}"
+echo -e "${MAGENTA}[9.5/12] FIXING ALL HARDCODED PATHS${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 # ✅ Part 1: Fix textureGenPipeline.py
