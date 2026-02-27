@@ -8,7 +8,7 @@ import base64
 import asyncio
 import shutil
 from pathlib import Path
-
+from app.utils.fix_glb_mediatype import fix_glb_file
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 HUNYUAN_DIR = BASE_DIR / "hunyuan3d-2.1"
 
@@ -235,6 +235,16 @@ class Hunyuan3DService:
             try:
                 shutil.move(str(file_path), str(download_path))
                 print(f"✅ Moved file to: {download_path}")
+                
+                # ✅ FIX GLB MEDIATYPE ISSUES (post-processing)
+                fix_result = fix_glb_file(str(download_path))
+                if fix_result['status'] == 'fixed':
+                    print(f"🔧 Fixed GLB mediatype: {fix_result['message']}")
+                    for issue in fix_result.get('issues', []):
+                        print(f"   Image {issue['image_index']}: {issue['declared']} → {issue['actual']}")
+                elif fix_result['status'] == 'error':
+                    print(f"⚠️  GLB fix failed: {fix_result['message']}")
+                
             except Exception as e:
                 print(f"⚠️ Move failed, trying copy: {e}")
                 shutil.copy2(str(file_path), str(download_path))
@@ -242,6 +252,14 @@ class Hunyuan3DService:
                     Path(file_path).unlink()
                 except:
                     pass
+                
+                # ✅ FIX GLB MEDIATYPE ISSUES (even after copy)
+                try:
+                    fix_result = fix_glb_file(str(download_path))
+                    if fix_result['status'] == 'fixed':
+                        print(f"🔧 Fixed GLB mediatype: {fix_result['message']}")
+                except Exception as fix_error:
+                    print(f"⚠️  Could not fix GLB: {fix_error}")
             
             # Update DB: status='completed', output_model_url
             job = db.query(ModelJob).filter(ModelJob.job_id == job_id).first()

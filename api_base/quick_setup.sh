@@ -43,13 +43,37 @@ echo -e "${YELLOW}⏱️  Estimated time: 60-90 minutes${NC}"
 echo -e "${YELLOW}💾 Total download: ~18-23 GB${NC}"
 echo ""
 
-echo -e "${CYAN}Nhập IP server của bạn (ví dụ: 175.155.64.231):${NC}"
-read -p "Server IP: " SERVER_IP
-EXTERNAL_URL="http://${SERVER_IP}:8000"
-echo -e "${GREEN}EXTERNAL_URL sẽ là: $EXTERNAL_URL${NC}"
-echo ""
+
 
 read -p "Press ENTER to start or Ctrl+C to cancel..."
+
+# ==========================================
+# INPUT: Cloudflare Tunnel URL
+# ==========================================
+echo -e "\n${CYAN}═══════════════════════════════════════${NC}"
+echo -e "${CYAN}🌐 CLOUDFLARE TUNNEL CONFIGURATION${NC}"
+echo -e "${CYAN}═══════════════════════════════════════${NC}\n"
+
+echo "Enter your Cloudflare Tunnel URL (e.g., https://xxx.trycloudflare.com)"
+echo "Leave blank to use localhost only"
+read -p "Tunnel URL: " CLOUDFLARE_TUNNEL_URL
+
+# Validate URL format if provided
+if [ -n "$CLOUDFLARE_TUNNEL_URL" ]; then
+    if [[ ! "$CLOUDFLARE_TUNNEL_URL" =~ ^https?:// ]]; then
+        echo -e "${RED}❌ Invalid URL format. Must start with http:// or https://${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}✅ Will use: $CLOUDFLARE_TUNNEL_URL${NC}"
+    ALLOWED_ORIGINS="http://localhost:3000,http://localhost:5173,$CLOUDFLARE_TUNNEL_URL"
+    GOOGLE_REDIRECT_URI="$CLOUDFLARE_TUNNEL_URL/api/v1/auth/google/callback"
+    EXTERNAL_URL="$CLOUDFLARE_TUNNEL_URL"
+else
+    echo -e "${YELLOW}⚠️  No tunnel URL provided, using localhost only${NC}"
+    ALLOWED_ORIGINS="http://localhost:3000,http://localhost:5173"
+    GOOGLE_REDIRECT_URI="http://localhost:8000/api/v1/auth/google/callback"
+    EXTERNAL_URL="http://localhost:8000"
+fi
 
 START_TIME=$(date +%s)
 
@@ -590,14 +614,14 @@ ACCESS_TOKEN_EXPIRE_MINUTES=43200
 # =========================================
 # 🌐 CORS CONFIG
 # =========================================
-ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173,$EXTERNAL_URL
+ALLOWED_ORIGINS=$ALLOWED_ORIGINS
 
 # =========================================
 # 🔐 GOOGLE OAUTH
 # =========================================
 GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET
-GOOGLE_REDIRECT_URI=$EXTERNAL_URL/api/v1/auth/google/callback
+GOOGLE_REDIRECT_URI=$GOOGLE_REDIRECT_URI
 
 # =========================================
 # 💳 PAYMENT (OPTIONAL)
@@ -680,7 +704,6 @@ echo ""
 echo "  source venv/bin/activate"
 echo "  python run_api.py"
 echo ""
-echo -e "${CYAN}📋 API Docs: $EXTERNAL_URL/docs${NC}"
 echo ""
 echo -e "${YELLOW}⚠️  First inference slower (model loading)${NC}"
 echo -e "${CYAN}📄 Credentials: ~/hunyuan3d_setup/${NC}"
