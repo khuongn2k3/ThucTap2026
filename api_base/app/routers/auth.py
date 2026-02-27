@@ -141,7 +141,88 @@ async def get_me(current_user: User = Depends(get_current_user)):
     """
     return UserResponse.from_orm(current_user)
 
+# =========================================
+# PROFILE UPDATE
+# =========================================
 
+class UpdateProfileRequest(BaseModel):
+    """Update profile request."""
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+
+@router.post("/me/update", response_model=UserResponse)
+async def update_profile(
+    request: UpdateProfileRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update current user's profile.
+    
+    - **name**: New display name (optional)
+    - **email**: New email (optional)
+    """
+    if request.name:
+        current_user.name = request.name
+    
+    if request.email and request.email != current_user.email:
+        # Check if new email already exists
+        existing = db.query(User).filter(User.email == request.email).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already in use"
+            )
+        current_user.email = request.email
+    
+    db.commit()
+    db.refresh(current_user)
+    
+    return UserResponse.from_orm(current_user)
+
+
+# =========================================
+# CHANGE PASSWORD
+# =========================================
+
+class ChangePasswordRequest(BaseModel):
+    """Change password request."""
+    current: str
+    new: str
+    new_confirmation: str
+
+@router.post("/me/change-password")
+async def change_password(
+    request: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Change current user's password.
+    
+    - **current**: Current password
+    - **new**: New password
+    - **new_confirmation**: New password confirmation
+    """
+    # Verify current password
+    if not current_user.password or not verify_password(request.current, current_user.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Current password is incorrect"
+        )
+    
+    # Check new password confirmation
+    if request.new != request.new_confirmation:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New passwords do not match"
+        )
+    
+    # Update password
+    current_user.password = hash_password(request.new)
+    db.commit()
+    
+    return {"message": "Password changed successfully"}
 @router.get("/")
 async def auth_info():
     """Auth endpoints info."""

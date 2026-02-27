@@ -2,7 +2,7 @@
 Payment model for automatic recharge system.
 """
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, Enum, Index
+from sqlalchemy import Column, Integer, String, Float, DateTime, Enum, Index, ForeignKey
 from datetime import datetime
 import enum
 
@@ -22,7 +22,7 @@ class Payment(Base):
     __tablename__ = "payments"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    user_id = Column(Integer, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     
     # Package info
     package_id = Column(String(50), nullable=False)
