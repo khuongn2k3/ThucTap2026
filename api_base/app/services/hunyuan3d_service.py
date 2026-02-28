@@ -1,5 +1,5 @@
 """
-Hunyuan3D Service - With Database Integration + Blender Processor (INTEGRATED v2)
+Hunyuan3D Service - With Database Integration (FIXED)
 """
 import os
 import sys
@@ -36,25 +36,6 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.task import ModelJob
 
-# ==========================================
-# ✅ BLENDER PROCESSOR IMPORT
-# ==========================================
-try:
-    from blender_processor import (
-        convert_obj_to_glb,
-        is_blender_enabled,
-        get_blender_status,
-        BLENDER_AVAILABLE
-    )
-    print("✅ Blender processor module imported")
-except ImportError as e:
-    print(f"⚠️  Blender processor not available: {e}")
-    print("   GLB conversion from OBJ will be unavailable")
-    convert_obj_to_glb = None
-    is_blender_enabled = lambda: False
-    get_blender_status = lambda: {"enabled": False, "available": False, "error": str(e)}
-    BLENDER_AVAILABLE = False
-
 try:
     from model_worker import ModelWorker
     from api_models import GenerationRequest
@@ -71,7 +52,7 @@ except ImportError as e:
 
 
 class Hunyuan3DService:
-    """Service for managing Hunyuan3D model operations with DB integration + Blender processor"""
+    """Service for managing Hunyuan3D model operations with DB integration"""
     
     _instance = None
     _initialized = False
@@ -86,21 +67,6 @@ class Hunyuan3DService:
         if not self._initialized:
             self.worker = None
             self.task_cache: Dict[str, Dict[str, Any]] = {}
-            
-            # ✅ Initialize Blender processor status
-            self.blender_enabled = is_blender_enabled()
-            blender_status = get_blender_status()
-            
-            if self.blender_enabled:
-                print(f"✅ Blender processor enabled (version: {blender_status.get('blender_version', 'N/A')})")
-                print("   OBJ→GLB conversion will be available")
-            else:
-                if blender_status.get('disabled_by_env'):
-                    print("ℹ️  Blender processor disabled by DISABLE_BLENDER environment variable")
-                elif not blender_status.get('available'):
-                    print("⚠️  Blender (bpy) not available - OBJ→GLB conversion disabled")
-                print("   Generated GLB files will be used as-is (from model_worker)")
-            
             self._initialized = True
             print("🎨 Hunyuan3D Service initialized (singleton)")
     
@@ -152,53 +118,6 @@ class Hunyuan3DService:
             compile=False
         )
     
-    # ==========================================
-    # ✅ NEW METHOD: OBJ to GLB conversion
-    # ==========================================
-    def _convert_obj_to_glb_if_enabled(
-        self,
-        obj_path: Path,
-        output_dir: Path
-    ) -> Optional[Path]:
-        """
-        Convert OBJ to GLB if Blender is enabled.
-        
-        Args:
-            obj_path: Path to input OBJ file
-            output_dir: Directory for output GLB file
-        
-        Returns:
-            GLB file path if successful, None otherwise
-        """
-        if not self.blender_enabled or convert_obj_to_glb is None:
-            print("   Blender disabled, skipping OBJ→GLB conversion")
-            return None
-        
-        if not obj_path.exists():
-            print(f"   ⚠️  OBJ file not found: {obj_path}")
-            return None
-        
-        # Generate GLB filename
-        glb_filename = obj_path.stem + '.glb'
-        glb_path = output_dir / glb_filename
-        
-        print(f"   🔄 Converting OBJ to GLB: {obj_path.name}")
-        
-        success, error = convert_obj_to_glb(
-            obj_path=str(obj_path),
-            glb_path=str(glb_path),
-            shade_type="SMOOTH",
-            auto_smooth_angle=60,
-            merge_vertices=True
-        )
-        
-        if success:
-            print(f"   ✅ GLB created: {glb_path.name}")
-            return glb_path
-        else:
-            print(f"   ❌ GLB conversion failed: {error}")
-            return None
-    
     async def generate_3d(
         self,
         db: Session,
@@ -206,8 +125,7 @@ class Hunyuan3DService:
         input_image_url: str,
         remove_background: bool = True,
         generate_texture: bool = True,
-        user_id: Optional[int] = None,
-        convert_to_glb: bool = False  # ✅ NEW: Optional OBJ→GLB conversion
+        user_id: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Generate 3D model from image with DB tracking
@@ -219,7 +137,6 @@ class Hunyuan3DService:
             remove_background: Whether to remove background
             generate_texture: Whether to generate texture
             user_id: User ID for tracking
-            convert_to_glb: If True, convert OBJ output to GLB (requires Blender)
             
         Returns:
             Dict with job_id and status
@@ -255,8 +172,7 @@ class Hunyuan3DService:
         self.task_cache[job_id] = {
             "status": "pending",
             "user_id": user_id,
-            "created_at": asyncio.get_event_loop().time(),
-            "convert_to_glb": convert_to_glb  # ✅ Store conversion preference
+            "created_at": asyncio.get_event_loop().time()
         }
         
         # Start generation in background
@@ -265,8 +181,7 @@ class Hunyuan3DService:
                 job_id=job_id,
                 image_data=image_data,
                 remove_background=remove_background,
-                generate_texture=generate_texture,
-                convert_to_glb=convert_to_glb  # ✅ Pass to processor
+                generate_texture=generate_texture
             )
         )
         
@@ -276,14 +191,7 @@ class Hunyuan3DService:
             "message": "3D generation started"
         }
     
-    async def _process_generation(
-        self, 
-        job_id, 
-        image_data, 
-        remove_background, 
-        generate_texture,
-        convert_to_glb=False  # ✅ NEW parameter
-    ):
+    async def _process_generation(self, job_id, image_data, remove_background, generate_texture):
         """Process generation in background with DB updates"""
         from app.models.base_db import SessionLocal
         db = SessionLocal()
@@ -317,31 +225,16 @@ class Hunyuan3DService:
             
             print(f"✅ Generated model: {file_path}")
             
-            # ==========================================
-            # ✅ OPTIONAL: OBJ to GLB conversion
-            # ==========================================
-            file_path_obj = Path(file_path)
-            extra_glb_path = None
-            
-            if convert_to_glb and file_path_obj.suffix.lower() == '.obj':
-                print("🔄 OBJ→GLB conversion requested...")
-                extra_glb_path = self._convert_obj_to_glb_if_enabled(
-                    obj_path=file_path_obj,
-                    output_dir=file_path_obj.parent
-                )
-                if extra_glb_path:
-                    print(f"   ✅ Additional GLB created: {extra_glb_path.name}")
-            
             # Generate output URL
             output_model_url = f"{settings.EXTERNAL_URL}/api/v1/download/{job_id}.glb"
             
             # ✅ Use shutil.move instead of os.rename (cross-device safe)
-            download_dir = Path(settings.DOWNLOAD_DIR)
-            download_dir.mkdir(parents=True, exist_ok=True)
-            download_path = download_dir / f"{job_id}.glb"
+            download_path = Path(settings.DOWNLOAD_DIR) / f"{job_id}.glb"
+            download_path.parent.mkdir(parents=True, exist_ok=True)
             
             try:
                 shutil.move(str(file_path), str(download_path))
+                print(f"✅ Moved file to: {download_path}")
                 
                 # ✅ FIX GLB MEDIATYPE ISSUES (post-processing)
                 fix_result = fix_glb_file(str(download_path))
@@ -367,15 +260,6 @@ class Hunyuan3DService:
                         print(f"🔧 Fixed GLB mediatype: {fix_result['message']}")
                 except Exception as fix_error:
                     print(f"⚠️  Could not fix GLB: {fix_error}")
-            
-            # ✅ Also move extra GLB if created
-            if extra_glb_path and extra_glb_path.exists():
-                extra_download_path = download_dir / f"{job_id}_blender.glb"
-                try:
-                    shutil.move(str(extra_glb_path), str(extra_download_path))
-                    print(f"   ✅ Moved Blender GLB: {extra_download_path.name}")
-                except Exception as e:
-                    print(f"   ⚠️  Failed to move Blender GLB: {e}")
             
             # Update DB: status='completed', output_model_url
             job = db.query(ModelJob).filter(ModelJob.job_id == job_id).first()
@@ -502,15 +386,6 @@ class Hunyuan3DService:
                     print(f"🗑️  Deleted file: {file_path}")
                 except Exception as e:
                     print(f"⚠️ Failed to delete file: {e}")
-            
-            # ✅ Also delete Blender GLB if exists
-            blender_glb = Path(settings.DOWNLOAD_DIR) / f"{job_id}_blender.glb"
-            if blender_glb.exists():
-                try:
-                    blender_glb.unlink()
-                    print(f"🗑️  Deleted Blender GLB: {blender_glb}")
-                except Exception as e:
-                    print(f"⚠️ Failed to delete Blender GLB: {e}")
         
         # Delete from database
         db.delete(job)
@@ -550,14 +425,6 @@ class Hunyuan3DService:
                 except Exception as e:
                     print(f"⚠️ Failed to delete {file_path}: {e}")
             
-            # ✅ Also delete Blender GLB
-            blender_glb = Path(settings.DOWNLOAD_DIR) / f"{job.job_id}_blender.glb"
-            if blender_glb.exists():
-                try:
-                    blender_glb.unlink()
-                except Exception as e:
-                    print(f"⚠️ Failed to delete Blender GLB: {e}")
-            
             db.delete(job)
             
             if job.job_id in self.task_cache:
@@ -571,26 +438,30 @@ class Hunyuan3DService:
         return deleted_count
     
     def get_worker_status(self) -> Dict[str, Any]:
-        """Get worker status including Blender processor"""
-        active_jobs = 0
-        if self.worker is not None:
-            active_jobs = len([
-                t for t in self.task_cache.values() 
-                if t["status"] in ["pending", "processing"]
-            ])
+        """Get worker status"""
+        if self.worker is None:
+            return {
+                "initialized": False,
+                "device": settings.HUNYUAN3D_DEVICE,
+                "queue_length": 0,
+                "active_jobs": 0,
+                "hunyuan3d_available": HUNYUAN3D_AVAILABLE,
+                "model_path": str(HUNYUAN_DIR)
+            }
         
-        # ✅ Include Blender status
-        status = {
-            "initialized": self.worker is not None,
+        active_jobs = len([
+            t for t in self.task_cache.values() 
+            if t["status"] in ["pending", "processing"]
+        ])
+        
+        return {
+            "initialized": True,
             "device": settings.HUNYUAN3D_DEVICE,
-            "queue_length": self.worker.get_queue_length() if self.worker and hasattr(self.worker, 'get_queue_length') else 0,
+            "queue_length": self.worker.get_queue_length() if hasattr(self.worker, 'get_queue_length') else 0,
             "active_jobs": active_jobs,
             "hunyuan3d_available": HUNYUAN3D_AVAILABLE,
-            "model_path": str(HUNYUAN_DIR),
-            "blender": get_blender_status(),  # ✅ Add Blender status
+            "model_path": str(HUNYUAN_DIR)
         }
-        
-        return status
 
 
 # Create singleton instance
