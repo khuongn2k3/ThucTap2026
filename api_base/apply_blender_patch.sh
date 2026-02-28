@@ -28,7 +28,7 @@ echo "✅ Backup created"
 # PATCH 1: Add to header description (around line 33)
 # ==========================================
 echo "📝 Patch 1: Updating header description..."
-sed -i '/✓ Download AI model weights/a\  ✓ Setup Blender processor (optional OBJ->GLB conversion)' "$QUICK_SETUP_FILE"
+sed -i '/✓ Download AI model weights/a\  ✓ Setup Blender processor \(optional OBJ->GLB conversion\)' "$QUICK_SETUP_FILE"
 
 # ==========================================
 # PATCH 2: Insert STEP 7.5 after STEP 7 (after line 398, before STEP 8)
@@ -73,13 +73,13 @@ try:
         print('✅ Blender processor: ENABLED')
         blender_ver = status.get('blender_version', 'N/A')
         print(f'   Blender version: {blender_ver}')
-        print('   OBJ→GLB conversion will be available')
+        print('   OBJ->GLB conversion will be available')
     else:
         if status.get('disabled_by_env'):
             print('ℹ️  Blender processor: DISABLED (by DISABLE_BLENDER env)')
         elif not status.get('available'):
             print('⚠️  Blender processor: UNAVAILABLE (bpy not installed)')
-            print('   OBJ→GLB conversion will NOT be available')
+            print('   OBJ->GLB conversion will NOT be available')
             print('   Install: pip install fake-bpy-module-latest')
         else:
             print('ℹ️  Blender processor: DISABLED')
@@ -97,7 +97,7 @@ except Exception as e:
 else
     echo -e "${YELLOW}⚠️  blender_processor.py not found in api_base/${NC}"
     echo "   Expected location: $(pwd)/blender_processor.py"
-    echo "   OBJ→GLB conversion will be unavailable"
+    echo "   OBJ->GLB conversion will be unavailable"
     echo ""
     echo "   To enable Blender processor:"
     echo "   1. Copy blender_processor.py to api_base/"
@@ -134,8 +134,8 @@ if [ -n "$ENV_LINE" ]; then
 # =========================================\\
 # 🎨 BLENDER PROCESSOR\\
 # =========================================\\
-# Set to 'true' to disable OBJ→GLB conversion (faster, dev mode)\\
-# Set to 'false' to enable OBJ→GLB conversion (requires bpy/Blender)\\
+# Set to 'true' to disable OBJ->GLB conversion \\(faster, dev mode\\)\\
+# Set to 'false' to enable OBJ->GLB conversion \\(requires bpy/Blender\\)\\
 DISABLE_BLENDER=false
 " "$QUICK_SETUP_FILE"
     echo "✅ DISABLE_BLENDER added to .env"
@@ -163,7 +163,7 @@ try:\\
     from blender_processor import get_blender_status\\
     status = get_blender_status()\\
     if status['enabled']:\\
-        print('   ✅ ENABLED - OBJ→GLB conversion available')\\
+        print('   ✅ ENABLED - OBJ->GLB conversion available')\\
         print(f\\\"   Version: {status.get('blender_version', 'N/A')}\\\")\\
     else:\\
         print('   ⚠️  DISABLED - Only model_worker GLB will be used')\\
