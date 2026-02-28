@@ -28,7 +28,7 @@ echo "✅ Backup created"
 # PATCH 1: Add to header description (around line 33)
 # ==========================================
 echo "📝 Patch 1: Updating header description..."
-sed -i '/✓ Download AI model weights/a\  ✓ Setup Blender processor \(optional OBJ->GLB conversion\)' "$QUICK_SETUP_FILE"
+sed -i '/✓ Download AI model weights/a\  ✓ Setup Blender processor - optional OBJ->GLB conversion' "$QUICK_SETUP_FILE"
 
 # ==========================================
 # PATCH 2: Insert STEP 7.5 after STEP 7 (after line 398, before STEP 8)
@@ -76,9 +76,9 @@ try:
         print('   OBJ->GLB conversion will be available')
     else:
         if status.get('disabled_by_env'):
-            print('ℹ️  Blender processor: DISABLED (by DISABLE_BLENDER env)')
+            print('ℹ️  Blender processor: DISABLED - by DISABLE_BLENDER env')
         elif not status.get('available'):
-            print('⚠️  Blender processor: UNAVAILABLE (bpy not installed)')
+            print('⚠️  Blender processor: UNAVAILABLE - bpy not installed')
             print('   OBJ->GLB conversion will NOT be available')
             print('   Install: pip install fake-bpy-module-latest')
         else:
@@ -134,8 +134,8 @@ if [ -n "$ENV_LINE" ]; then
 # =========================================\\
 # 🎨 BLENDER PROCESSOR\\
 # =========================================\\
-# Set to 'true' to disable OBJ->GLB conversion \\(faster, dev mode\\)\\
-# Set to 'false' to enable OBJ->GLB conversion \\(requires bpy/Blender\\)\\
+# Set to 'true' to disable OBJ->GLB conversion - faster dev mode\\
+# Set to 'false' to enable OBJ->GLB conversion - requires bpy/Blender\\
 DISABLE_BLENDER=false
 " "$QUICK_SETUP_FILE"
     echo "✅ DISABLE_BLENDER added to .env"
@@ -202,4 +202,4 @@ echo ""
 echo "Next steps:"
 echo "  1. Copy blender_processor.py to api_base/"
 echo "  2. Run ./quick_setup.sh"
-echo "  3. Edit .env to set DISABLE_BLENDER=false (if needed)"
+echo "  3. Edit .env to set DISABLE_BLENDER=false if needed"
