@@ -93,7 +93,7 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
     
     return LoginResponse(
         access_token=access_token,
-        user=UserResponse.from_orm(new_user)
+        user=UserResponse.model_validate(new_user)
     )
 
 
@@ -128,7 +128,7 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     
     return LoginResponse(
         access_token=access_token,
-        user=UserResponse.from_orm(user)
+        user=UserResponse.model_validate(user)
     )
 
 
@@ -139,7 +139,7 @@ async def get_me(current_user: User = Depends(get_current_user)):
     
     Requires JWT token in Authorization header: `Bearer <token>`
     """
-    return UserResponse.from_orm(current_user)
+    return UserResponse.model_validate(current_user)
 
 # =========================================
 # PROFILE UPDATE
@@ -178,7 +178,7 @@ async def update_profile(
     db.commit()
     db.refresh(current_user)
     
-    return UserResponse.from_orm(current_user)
+    return UserResponse.model_validate(current_user)
 
 
 # =========================================

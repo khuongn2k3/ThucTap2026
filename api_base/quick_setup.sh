@@ -46,34 +46,9 @@ echo ""
 
 
 read -p "Press ENTER to start or Ctrl+C to cancel..."
-
-# ==========================================
-# INPUT: Cloudflare Tunnel URL
-# ==========================================
-echo -e "\n${CYAN}═══════════════════════════════════════${NC}"
-echo -e "${CYAN}🌐 CLOUDFLARE TUNNEL CONFIGURATION${NC}"
-echo -e "${CYAN}═══════════════════════════════════════${NC}\n"
-
-echo "Enter your Cloudflare Tunnel URL (e.g., https://xxx.trycloudflare.com)"
-echo "Leave blank to use localhost only"
-read -p "Tunnel URL: " CLOUDFLARE_TUNNEL_URL
-
-# Validate URL format if provided
-if [ -n "$CLOUDFLARE_TUNNEL_URL" ]; then
-    if [[ ! "$CLOUDFLARE_TUNNEL_URL" =~ ^https?:// ]]; then
-        echo -e "${RED}❌ Invalid URL format. Must start with http:// or https://${NC}"
-        exit 1
-    fi
-    echo -e "${GREEN}✅ Will use: $CLOUDFLARE_TUNNEL_URL${NC}"
-    ALLOWED_ORIGINS="http://localhost:3000,http://localhost:5173,$CLOUDFLARE_TUNNEL_URL"
-    GOOGLE_REDIRECT_URI="$CLOUDFLARE_TUNNEL_URL/api/v1/auth/google/callback"
-    EXTERNAL_URL="$CLOUDFLARE_TUNNEL_URL"
-else
-    echo -e "${YELLOW}⚠️  No tunnel URL provided, using localhost only${NC}"
-    ALLOWED_ORIGINS="http://localhost:3000,http://localhost:5173"
-    GOOGLE_REDIRECT_URI="http://localhost:8000/api/v1/auth/google/callback"
-    EXTERNAL_URL="http://localhost:8000"
-fi
+ALLOWED_ORIGINS="http://localhost:3000,http://localhost:5173"
+GOOGLE_REDIRECT_URI="http://localhost:8000/api/v1/auth/google/callback"
+EXTERNAL_URL="http://localhost:8000"
 
 START_TIME=$(date +%s)
 
@@ -224,8 +199,6 @@ else
 fi
 
 echo "CUDA wheel: $CUDA_WHEEL"
-
-cp requirements-gpu.txt requirements-gpu.txt.bak
 
 # Skip torch (already installed in base image)
 sed -i 's/^torch==/#torch==/' requirements-gpu.txt
