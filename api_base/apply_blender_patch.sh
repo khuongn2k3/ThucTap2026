@@ -28,7 +28,7 @@ echo "✅ Backup created"
 # PATCH 1: Add to header description (around line 33)
 # ==========================================
 echo "📝 Patch 1: Updating header description..."
-sed -i '/✓ Download AI model weights/a\  ✓ Setup Blender processor (optional OBJ→GLB conversion)' "$QUICK_SETUP_FILE"
+sed -i '/✓ Download AI model weights/a\  ✓ Setup Blender processor (optional OBJ->GLB conversion)' "$QUICK_SETUP_FILE"
 
 # ==========================================
 # PATCH 2: Insert STEP 7.5 after STEP 7 (after line 398, before STEP 8)
