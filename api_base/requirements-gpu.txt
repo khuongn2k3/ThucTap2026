@@ -96,7 +96,7 @@ onnxruntime==1.16.3
 # =========================================
 # BLENDER (Optional - for advanced mesh processing)
 # =========================================
-bpy==3.6.0  # Very large, only install if needed
+#bpy==3.6.0  # Very large, only install if needed
 
 # =========================================
 # API & DATABASE
