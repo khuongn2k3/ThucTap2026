@@ -144,7 +144,17 @@ echo -e "${GREEN}✅ Running from api_base/ — OK${NC}"
 
 # Check torch + CUDA ngay tu dau
 SYSTEM_TORCH=0
-for PY_BIN in python3.10 python3 python; do
+# Tim tat ca python co tren he thong
+PYTHON_CANDIDATES=(
+    /venv/main/bin/python3
+    /venv/main/bin/python
+    $(find /venv /opt/conda -name "python3" -type f 2>/dev/null | head -5)
+    python3.10
+    python3
+    python
+)
+
+for PY_BIN in "${PYTHON_CANDIDATES[@]}"; do
     if command -v "$PY_BIN" &>/dev/null; then
         if $PY_BIN -c "import torch; assert torch.cuda.is_available()" 2>/dev/null; then
             TORCH_VER=$($PY_BIN -c "import torch; print(torch.__version__)")
