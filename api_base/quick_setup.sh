@@ -249,11 +249,13 @@ sed -i 's/^torch==/#torch==/' requirements-gpu.txt
 sed -i 's/^torchvision==/#torchvision==/' requirements-gpu.txt
 sed -i 's/^torchaudio==/#torchaudio==/' requirements-gpu.txt
 
-# Kiểm tra torch đã có sẵn chưa
-if python -c "import torch" 2>/dev/null; then
-    echo -e "${GREEN}✅ PyTorch đã có sẵn, bỏ qua cài${NC}"
+# Kiểm tra torch + CUDA đã có sẵn chưa
+if python -c "import torch; assert torch.cuda.is_available()" 2>/dev/null; then
+    TORCH_VER=$(python -c "import torch; print(torch.__version__)")
+    GPU_DEV=$(python -c "import torch; print(torch.cuda.get_device_name(0))")
+    echo -e "${GREEN}✅ PyTorch ${TORCH_VER} + CUDA đã có sẵn (${GPU_DEV}), bỏ qua cài${NC}"
 else
-    echo -e "${YELLOW}PyTorch chưa có, đang cài với CUDA wheel: $CUDA_WHEEL...${NC}"
+    echo -e "${YELLOW}PyTorch chưa có hoặc CUDA chưa khả dụng, đang cài với wheel: $CUDA_WHEEL...${NC}"
     pip install torch torchvision torchaudio \
         --index-url https://download.pytorch.org/whl/${CUDA_WHEEL}
     echo -e "${GREEN}✅ PyTorch installed${NC}"
