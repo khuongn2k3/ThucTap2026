@@ -26,7 +26,7 @@ router = APIRouter()
 
 # ────────────────────────────────────────────────────────────────────────────
 # Dependency
-# ─────────────────────────────────────────────���──────────────────────────────
+# ────────────────────────────────────────────────────────────────────────────
 
 async def get_uid(current_user: User = Depends(get_current_user)) -> int:
     return current_user.id
@@ -465,6 +465,8 @@ async def job_progress_sse(job_id: str):
     Response: `text/event-stream` theo chuẩn SSE, mỗi event có:
       - event: progress | completed | failed | heartbeat
       - data:  JSON (stringified)
+
+    Stream tự đóng sau khi nhận event `completed` hoặc `failed`.
     """
     # Lấy queue hiện có, nếu chưa có (client connect sớm) thì tạo mới
     queue = hunyuan3d_mv_service.get_queue(job_id)
@@ -474,17 +476,41 @@ async def job_progress_sse(job_id: str):
     async def event_generator():
         try:
             while True:
-                item = await queue.get()
+                try:
+                    # ── Heartbeat mỗi 20s để giữ kết nối qua Cloudflare/nginx ──
+                    # Cloudflare trycloudflare.com có idle timeout ~100s
+                    # → gửi heartbeat mỗi 20s để tránh bị cắt giữa chừng
+                    item = await asyncio.wait_for(queue.get(), timeout=20.0)
+                except asyncio.TimeoutError:
+                    # Không có event mới → gửi comment heartbeat (chuẩn SSE)
+                    yield b": heartbeat\n\n"
+                    continue
+
                 event = item.get("event", "message")
-                data = item.get("data", {})
-                payload = f"event: {event}\n" \
-                          f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+                data  = item.get("data", {})
+                payload = (
+                    f"event: {event}\n"
+                    f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+                )
                 yield payload.encode("utf-8")
+
+                # ── Đóng stream sau completed/failed ──────────────────────────
+                # Frontend nhận tín hiệu rõ ràng → trigger Stage 2 hoặc hiện lỗi
+                if event in ("completed", "failed"):
+                    break
+
         except asyncio.CancelledError:
-            # client disconnect
+            # Client disconnect chủ động
             pass
         finally:
             # Giải phóng queue khi SSE connection đóng
             hunyuan3d_mv_service.release_queue(job_id)
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control":    "no-cache",
+            "X-Accel-Buffering": "no",   # tắt buffer nginx → event đến ngay lập tức
+        },
+    )
