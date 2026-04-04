@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==========================================
-# 🚀 HUNYUAN3D GPU SERVER - FULL AUTO SETUP (FIXED v4)
+# 🚀 HUNYUAN3D-2MV GPU SERVER - AUTO SETUP
 # ==========================================
 
 set -e
@@ -12,15 +12,19 @@ MAGENTA='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
+# ── Điền thông tin Google OAuth của bạn ──
 GOOGLE_CLIENT_ID="YOUR_GOOGLE_CLIENT_ID_HERE"
 GOOGLE_CLIENT_SECRET="YOUR_GOOGLE_CLIENT_SECRET_HERE"
+
+# ── Google Drive file ID chứa toàn bộ project ──
+DRIVE_FILE_ID="1MnySWoKd7VhtebHnv1LUyPkZPDuRYlEL"
 
 clear
 echo -e "${CYAN}"
 cat << "EOF"
 ╔═══════════════════════════════════════════════════╗
 ║                                                   ║
-║   🚀 HUNYUAN3D GPU SERVER AUTO SETUP 🚀          ║
+║   🚀 HUNYUAN3D-2MV GPU SERVER AUTO SETUP 🚀      ║
 ║                                                   ║
 ║   Chạy xong đi uống trà, về test luôn! 🍵        ║
 ║                                                   ║
@@ -32,23 +36,63 @@ echo "This script will:"
 echo "  ✓ Check system requirements"
 echo "  ✓ Install MySQL server"
 echo "  ✓ Setup Python 3.10 environment"
-echo "  ✓ Install all dependencies (~10-15 GB)"
-echo "  ✓ Compile CUDA modules"
-echo "  ✓ Clone Hunyuan3D-2.1 from HuggingFace (~8 GB)"
-echo "  ✓ Download AI model weights"
+echo "  ✓ Install all dependencies"
+echo "  ✓ Download project từ Google Drive"
+echo "  ✓ Compile CUDA modules (hunyuan3d-2mv)"
 echo "  ✓ Create database & tables"
 echo "  ✓ Generate full .env file"
 echo ""
-echo -e "${YELLOW}⏱️  Estimated time: 60-90 minutes${NC}"
-echo -e "${YELLOW}💾 Total download: ~18-23 GB${NC}"
+echo -e "${YELLOW}⏱️  Estimated time: 30-50 minutes${NC}"
+echo -e "${YELLOW}💾 Download: từ Google Drive của bạn${NC}"
 echo ""
 
-
-
 read -p "Press ENTER to start or Ctrl+C to cancel..."
-ALLOWED_ORIGINS="http://localhost:3000,http://localhost:5173"
-GOOGLE_REDIRECT_URI="http://localhost:8000/api/v1/auth/google/callback"
-EXTERNAL_URL="http://localhost:8000"
+
+# ── Nhập IP thuê hoặc domain ngoài (tuỳ chọn) ──
+echo ""
+echo -e "${CYAN}╔══════════════════════════════════════════════════════════╗${NC}"
+echo -e "${CYAN}║        🌐 CẤU HÌNH IP / DOMAIN BÊN NGOÀI (OPTIONAL)     ║${NC}"
+echo -e "${CYAN}╚══════════════════════════════════════════════════════════╝${NC}"
+echo -e "${YELLOW}Nhập IP thuê hoặc domain đầy đủ (có hoặc không có https://).${NC}"
+echo -e "${YELLOW}Ví dụ:${NC}"
+echo -e "${CYAN}  IP thuê    : 203.0.113.45${NC}"
+echo -e "${CYAN}  Cloudflare : https://abc-xyz.trycloudflare.com${NC}"
+echo -e "${YELLOW}Để trống và nhấn ENTER nếu chỉ dùng localhost.${NC}"
+echo ""
+read -p "🖥️  Nhập IP hoặc domain (hoặc ENTER để bỏ qua): " EXTERNAL_INPUT
+
+if [ -n "$EXTERNAL_INPUT" ]; then
+    # Kiểm tra nếu đã có http:// hoặc https:// thì dùng nguyên
+    if [[ "$EXTERNAL_INPUT" =~ ^https?:// ]]; then
+        # Domain đầy đủ (VD: Cloudflare Tunnel)
+        EXTERNAL_BASE="${EXTERNAL_INPUT%/}"   # bỏ trailing slash nếu có
+        # Xác định scheme
+        SCHEME=$(echo "$EXTERNAL_BASE" | grep -o '^https\?')
+        DOMAIN=$(echo "$EXTERNAL_BASE" | sed 's|^https\?://||')
+        ALLOWED_ORIGINS="http://localhost:3000,http://localhost:5173,${EXTERNAL_BASE}"
+        GOOGLE_REDIRECT_URI="${EXTERNAL_BASE}/api/v1/auth/google/callback"
+        EXTERNAL_URL="${EXTERNAL_BASE}"
+        echo -e "${GREEN}✅ Domain ngoài: $EXTERNAL_BASE${NC}"
+        echo -e "${CYAN}   (dạng domain đầy đủ — không ghép port)${NC}"
+    else
+        # Chỉ là IP thuần (VD: 203.0.113.45)
+        EXTERNAL_BASE="http://${EXTERNAL_INPUT}"
+        ALLOWED_ORIGINS="http://localhost:3000,http://localhost:5173,http://${EXTERNAL_INPUT}:3000,http://${EXTERNAL_INPUT}:5173,http://${EXTERNAL_INPUT}:8000"
+        GOOGLE_REDIRECT_URI="http://${EXTERNAL_INPUT}:8000/api/v1/auth/google/callback"
+        EXTERNAL_URL="http://${EXTERNAL_INPUT}:8000"
+        echo -e "${GREEN}✅ IP thuê: $EXTERNAL_INPUT${NC}"
+        echo -e "${CYAN}   (dạng IP — tự ghép port 8000)${NC}"
+    fi
+    echo -e "${CYAN}   ALLOWED_ORIGINS : $ALLOWED_ORIGINS${NC}"
+    echo -e "${CYAN}   EXTERNAL_URL     : $EXTERNAL_URL${NC}"
+    echo -e "${CYAN}   REDIRECT_URI     : $GOOGLE_REDIRECT_URI${NC}"
+else
+    echo -e "${CYAN}ℹ️  Chỉ dùng localhost${NC}"
+    ALLOWED_ORIGINS="http://localhost:3000,http://localhost:5173"
+    GOOGLE_REDIRECT_URI="http://localhost:8000/api/v1/auth/google/callback"
+    EXTERNAL_URL="http://localhost:8000"
+fi
+echo ""
 
 START_TIME=$(date +%s)
 
@@ -56,7 +100,7 @@ START_TIME=$(date +%s)
 # STEP 0: Pre-flight checks
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[0/12] PRE-FLIGHT CHECKS${NC}"
+echo -e "${MAGENTA}[0/10] PRE-FLIGHT CHECKS${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 if ! curl -s --max-time 5 https://google.com > /dev/null; then
@@ -66,24 +110,37 @@ fi
 echo -e "${GREEN}✅ Internet connection OK${NC}"
 
 AVAILABLE_GB=$(df -BG . | tail -1 | awk '{print $4}' | sed 's/G//')
-if [ "$AVAILABLE_GB" -lt 50 ]; then
-    echo -e "${RED}❌ Need at least 50GB free space. Available: ${AVAILABLE_GB}GB${NC}"
+if [ "$AVAILABLE_GB" -lt 30 ]; then
+    echo -e "${RED}❌ Need at least 30GB free space. Available: ${AVAILABLE_GB}GB${NC}"
     exit 1
 fi
 echo -e "${GREEN}✅ Disk space: ${AVAILABLE_GB}GB available${NC}"
 
 if ! command -v nvidia-smi &> /dev/null; then
-    echo -e "${RED}❌ nvidia-smi not found!${NC}"
+    echo -e "${RED}❌ nvidia-smi not found! Cần GPU để chạy Hunyuan3D${NC}"
     exit 1
 fi
 
 GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
 GPU_MEMORY=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -1)
 CUDA_VERSION=$(nvidia-smi | grep "CUDA Version" | awk '{print $9}')
+GPU_MEMORY_GB=$((GPU_MEMORY / 1024))
 
 echo -e "${GREEN}✅ GPU: $GPU_NAME${NC}"
-echo -e "${GREEN}✅ VRAM: $((GPU_MEMORY / 1024)) GB${NC}"
+echo -e "${GREEN}✅ VRAM: ${GPU_MEMORY_GB} GB${NC}"
 echo -e "${GREEN}✅ CUDA: $CUDA_VERSION${NC}"
+
+if [ "$GPU_MEMORY_GB" -lt 16 ]; then
+    echo -e "${YELLOW}⚠️  Hunyuan3D-2mv cần ~14GB VRAM. Hiện có ${GPU_MEMORY_GB}GB${NC}"
+    echo -e "${YELLOW}   Shape + Texture không thể chạy đồng thời.${NC}"
+fi
+
+if [ ! -f "requirements-gpu.txt" ] || [ ! -f "run_api.py" ]; then
+    echo -e "${RED}❌ Script phải chạy từ trong thư mục api_base/${NC}"
+    echo "   cd api_base && bash quick_setup.sh"
+    exit 1
+fi
+echo -e "${GREEN}✅ Running from api_base/ — OK${NC}"
 
 echo -e "\n${GREEN}✅ All pre-flight checks passed!${NC}"
 sleep 1
@@ -92,7 +149,7 @@ sleep 1
 # STEP 1: Install system packages
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[1/12] INSTALLING SYSTEM PACKAGES${NC}"
+echo -e "${MAGENTA}[1/10] INSTALLING SYSTEM PACKAGES${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 apt update -qq
@@ -100,6 +157,7 @@ apt install -y \
     mysql-server git wget curl vim htop unzip \
     python3-pip python3-venv python3-dev \
     libmysqlclient-dev pkg-config \
+    build-essential ninja-build \
     > /dev/null 2>&1
 
 # Cài Python 3.10 nếu chưa có
@@ -116,12 +174,13 @@ echo -e "${GREEN}✅ System packages installed (Python $(python3.10 --version))$
 # STEP 2: Setup MySQL
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[2/12] SETTING UP MYSQL${NC}"
+echo -e "${MAGENTA}[2/10] SETTING UP MYSQL${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 service mysql start || true
+sleep 3
 
-DB_PASSWORD=$(openssl rand -base64 16 | tr -d "=+/" | cut -c1-16)
+DB_PASSWORD="123123"
 
 mysql <<EOSQL
 CREATE DATABASE IF NOT EXISTS hunyuan3d_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -147,28 +206,14 @@ echo -e "${GREEN}✅ MySQL configured${NC}"
 echo -e "${CYAN}   Password saved to: ~/hunyuan3d_setup/mysql_credentials.txt${NC}"
 
 # ==========================================
-# STEP 3: Verify api_base directory
+# STEP 3: Create Python 3.10 virtual environment
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[3/12] VERIFYING API_BASE DIRECTORY${NC}"
-echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
-
-if [ ! -f "requirements-gpu.txt" ] || [ ! -f "run_api.py" ]; then
-    echo -e "${RED}❌ Không tìm thấy file api_base!${NC}"
-    echo "  cd ThucTap2026/api_base && ./quick_setup.sh"
-    exit 1
-fi
-echo -e "${GREEN}✅ api_base directory OK${NC}"
-
-# ==========================================
-# STEP 4: Create Python 3.10 virtual environment
-# ==========================================
-echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[4/12] CREATING VIRTUAL ENVIRONMENT (Python 3.10)${NC}"
+echo -e "${MAGENTA}[3/10] CREATING VIRTUAL ENVIRONMENT (Python 3.10)${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 if [ -d "venv" ]; then
-    echo -e "${YELLOW}⚠️  venv/ exists, removing and recreating with Python 3.10...${NC}"
+    echo -e "${YELLOW}⚠️  venv/ exists, removing and recreating...${NC}"
     deactivate 2>/dev/null || true
     rm -rf venv
 fi
@@ -182,10 +227,10 @@ pip install --upgrade pip setuptools wheel > /dev/null 2>&1
 echo -e "${GREEN}✅ pip upgraded${NC}"
 
 # ==========================================
-# STEP 5: Detect CUDA version
+# STEP 4: Detect CUDA & Install PyTorch
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[5/12] CONFIGURING PYTORCH FOR CUDA${NC}"
+echo -e "${MAGENTA}[4/10] CONFIGURING PYTORCH FOR CUDA${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 if [[ $CUDA_VERSION == 12.4* ]]; then
@@ -197,31 +242,36 @@ elif [[ $CUDA_VERSION == 11.8* ]]; then
 else
     CUDA_WHEEL="cu121"
 fi
-
 echo "CUDA wheel: $CUDA_WHEEL"
 
-# Skip torch (already installed in base image)
+# Comment out torch trong requirements để tránh conflict
 sed -i 's/^torch==/#torch==/' requirements-gpu.txt
 sed -i 's/^torchvision==/#torchvision==/' requirements-gpu.txt
 sed -i 's/^torchaudio==/#torchaudio==/' requirements-gpu.txt
-echo -e "${GREEN}✅ Skipping torch (already have 2.5.1+cu124)${NC}"
+
+# Kiểm tra torch đã có sẵn chưa
+if python -c "import torch" 2>/dev/null; then
+    echo -e "${GREEN}✅ PyTorch đã có sẵn, bỏ qua cài${NC}"
+else
+    echo -e "${YELLOW}PyTorch chưa có, đang cài với CUDA wheel: $CUDA_WHEEL...${NC}"
+    pip install torch torchvision torchaudio \
+        --index-url https://download.pytorch.org/whl/${CUDA_WHEEL}
+    echo -e "${GREEN}✅ PyTorch installed${NC}"
+fi
 
 # ==========================================
-# STEP 6: Install Python dependencies
+# STEP 5: Install Python dependencies
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[6/12] INSTALLING DEPENDENCIES${NC}"
+echo -e "${MAGENTA}[5/10] INSTALLING PYTHON DEPENDENCIES${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
-echo -e "${YELLOW}This will take 30-60 minutes (~10-15 GB)...${NC}"
-echo -e "${CYAN}Go get some tea! 🍵${NC}\n"
-
+echo -e "${YELLOW}Cài packages, mất 15-30 phút...${NC}\n"
 pip install -r requirements-gpu.txt
-
+pip install gdown  # cần để download Google Drive
 echo -e "\n${GREEN}✅ Dependencies installed${NC}"
 
-# Verify PyTorch
-echo "Verifying PyTorch..."
+# Verify PyTorch + CUDA
 python -c "
 import torch
 print(f'✅ PyTorch: {torch.__version__}')
@@ -234,227 +284,133 @@ else:
 "
 
 # ==========================================
-# STEP 7: Clone Hunyuan3D-2.1 (Model + Code)
+# STEP 6: Download project từ Google Drive
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[7/12] CLONING HUNYUAN3D-2.1 MODEL + CODE${NC}"
+echo -e "${MAGENTA}[6/10] DOWNLOADING & EXTRACTING FROM GOOGLE DRIVE${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
-HUNYUAN_DIR="./hunyuan3d-2.1"
+MV_DIR="./hunyuan3d-2mv"
 
-if [ -d "$HUNYUAN_DIR" ]; then
-    echo -e "${YELLOW}⚠️  hunyuan3d-2.1/ đã tồn tại${NC}"
+if [ -d "$MV_DIR" ] && [ -d "$MV_DIR/hy3dgen" ] && [ -d "$MV_DIR/hunyuan3d-dit-v2-mv-fast" ]; then
+    echo -e "${GREEN}✅ hunyuan3d-2mv/ đã tồn tại và đầy đủ, bỏ qua download${NC}"
 else
-    echo -e "${YELLOW}Cloning Hunyuan3D-2.1 from HuggingFace (~8GB)...${NC}"
-    apt install -y git-lfs > /dev/null 2>&1
-    git lfs install
+    # Cài pv để có progress bar khi stream
+    apt install -y pv > /dev/null 2>&1 && PV_OK=1 || PV_OK=0
 
-    GIT_LFS_SKIP_SMUDGE=1 git clone https://huggingface.co/tencent/Hunyuan3D-2.1 "$HUNYUAN_DIR"
-    cd "$HUNYUAN_DIR"
-    git lfs pull
-    cd ..
-    echo -e "${GREEN}✅ Hunyuan3D-2.1 model cloned${NC}"
+    echo -e "${YELLOW}📥 Đang tải + giải nén song song (stream)...${NC}"
+    echo -e "${CYAN}   File ~9GB — ước tính 3–10 phút tuỳ băng thông${NC}\n"
+
+    STREAM_OK=0
+
+    # ── Thử stream: tải + giải nén cùng lúc, không lưu .tar.gz ──
+    if [ "$PV_OK" -eq 1 ]; then
+        echo -e "${CYAN}   [Mode] Stream với progress bar (pv)${NC}"
+        python -m gdown "https://drive.google.com/uc?id=${DRIVE_FILE_ID}" \
+            --fuzzy -O - 2>/dev/null \
+            | pv -s 9G -name "  Downloading" \
+            | tar -xz -C . \
+            && STREAM_OK=1
+    else
+        echo -e "${CYAN}   [Mode] Stream không có pv${NC}"
+        python -m gdown "https://drive.google.com/uc?id=${DRIVE_FILE_ID}" \
+            --fuzzy -O - 2>/dev/null \
+            | tar -xz -C . \
+            && STREAM_OK=1
+    fi
+
+    # ── Fallback: tải file rồi giải nén ──
+    if [ "$STREAM_OK" -eq 0 ]; then
+        echo -e "${YELLOW}⚠️  Stream thất bại, fallback: tải file rồi giải nén...${NC}"
+        DRIVE_ARCHIVE="./drive_download.tar.gz"
+
+        # Thử gdown
+        if ! python -m gdown "https://drive.google.com/uc?id=${DRIVE_FILE_ID}" \
+                --fuzzy -O "$DRIVE_ARCHIVE"; then
+            # Fallback curl
+            echo -e "${YELLOW}gdown thất bại, thử curl...${NC}"
+            curl -c /tmp/gdrive_cookie.txt -s -L \
+                "https://drive.google.com/uc?export=download&id=${DRIVE_FILE_ID}" \
+                | grep -o 'confirm=[^&"]*' | head -1 > /tmp/gdrive_confirm.txt
+            CONFIRM=$(cat /tmp/gdrive_confirm.txt)
+            curl -L -b /tmp/gdrive_cookie.txt \
+                "https://drive.google.com/uc?export=download&confirm=${CONFIRM}&id=${DRIVE_FILE_ID}" \
+                -o "$DRIVE_ARCHIVE"
+        fi
+
+        # Kiểm tra file
+        ARCHIVE_SIZE=$(du -m "$DRIVE_ARCHIVE" 2>/dev/null | cut -f1)
+        echo -e "${CYAN}   File size: ${ARCHIVE_SIZE} MB${NC}"
+        if [ "${ARCHIVE_SIZE:-0}" -lt 10 ]; then
+            echo -e "${RED}❌ File download quá nhỏ (${ARCHIVE_SIZE} MB) — bị block bởi Google Drive${NC}"
+            echo -e "${YELLOW}   Giải pháp: share file Drive dạng 'Anyone with link' rồi chạy lại${NC}"
+            rm -f "$DRIVE_ARCHIVE"
+            exit 1
+        fi
+
+        # Giải nén với progress
+        echo -e "${YELLOW}📦 Đang giải nén...${NC}"
+        if [ "$PV_OK" -eq 1 ]; then
+            pv "$DRIVE_ARCHIVE" | tar -xz -C .
+        else
+            tar -xzvf "$DRIVE_ARCHIVE" -C .
+        fi
+
+        rm -f "$DRIVE_ARCHIVE"
+        echo -e "${GREEN}✅ Giải nén xong, đã xoá file .tar.gz${NC}"
+    fi
+
+    # ── Xác nhận cấu trúc sau giải nén ──
+    if [ ! -d "$MV_DIR" ]; then
+        # Trường hợp tar giải nén không có wrapper folder
+        if [ -d "./hy3dgen" ]; then
+            mkdir -p "$MV_DIR"
+            mv ./hy3dgen ./hunyuan3d-dit-v2-mv-fast ./hunyuan3d-paint-v2-0-turbo "$MV_DIR/" 2>/dev/null || true
+            echo -e "${GREEN}✅ Đã gom vào hunyuan3d-2mv/${NC}"
+        else
+            echo -e "${RED}❌ Không tìm thấy hunyuan3d-2mv/ sau khi giải nén${NC}"
+            echo -e "${YELLOW}   Kiểm tra cấu trúc: ls -la ./${NC}"
+            exit 1
+        fi
+    fi
+
+    echo -e "${GREEN}✅ hunyuan3d-2mv/ sẵn sàng${NC}"
 fi
 
-# ✅ Clone code files from GitHub
-echo -e "${YELLOW}Cloning Hunyuan3D-2.1 code from GitHub...${NC}"
-GITHUB_CODE_DIR="/tmp/hunyuan3d-code"
+# Verify cấu trúc
+echo -e "${YELLOW}Verifying hunyuan3d-2mv structure...${NC}"
+[ -d "$MV_DIR/hy3dgen" ]                           && echo -e "${GREEN}  ✅ hy3dgen/ (package)${NC}"            || echo -e "${RED}  ❌ hy3dgen/ MISSING${NC}"
+[ -d "$MV_DIR/hunyuan3d-dit-v2-mv-fast" ]          && echo -e "${GREEN}  ✅ hunyuan3d-dit-v2-mv-fast/ (shape model)${NC}" || echo -e "${RED}  ❌ hunyuan3d-dit-v2-mv-fast/ MISSING${NC}"
+[ -d "$MV_DIR/hunyuan3d-paint-v2-0-turbo" ]        && echo -e "${GREEN}  ✅ hunyuan3d-paint-v2-0-turbo/ (texture model)${NC}" || echo -e "${RED}  ❌ hunyuan3d-paint-v2-0-turbo/ MISSING${NC}"
 
-if [ -d "$GITHUB_CODE_DIR" ]; then
-    rm -rf "$GITHUB_CODE_DIR"
-fi
+# ==========================================
+# STEP 7: Setup PYTHONPATH cho hunyuan3d-2mv
+# ==========================================
+echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
+echo -e "${MAGENTA}[7/10] CONFIGURING PYTHONPATH${NC}"
+echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
-git clone --depth=1 https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1.git "$GITHUB_CODE_DIR"
-
-echo "Copying code files into hunyuan3d-2.1/..."
-
-# ✅ Copy TOÀN BỘ code (force overwrite to get latest)
-echo -e "${YELLOW}Copying all code files (overwriting)...${NC}"
-cp -rf "$GITHUB_CODE_DIR"/* "$HUNYUAN_DIR/" 2>/dev/null || true
-echo -e "${GREEN}✅ All code files copied${NC}"
-
-# Cleanup
-rm -rf "$GITHUB_CODE_DIR"
-
-echo -e "${GREEN}✅ Code files copied successfully${NC}"
-
-# ✅ FIX: bpy optional import
-echo -e "${YELLOW}Fixing bpy optional imports...${NC}"
-sed -i 's/^import bpy$/try:\n    import bpy\nexcept ImportError:\n    bpy = None/' \
-    "$HUNYUAN_DIR/hy3dpaint/DifferentiableRenderer/mesh_utils.py"
-sed -i 's/^import bpy$/try:\n    import bpy\nexcept ImportError:\n    bpy = None/' \
-    "$HUNYUAN_DIR/hy3dshape/tools/render/render.py"
-echo -e "${GREEN}✅ bpy imports fixed${NC}"
-
-# ✅ FIX: Rename rembg.py to avoid circular import
-echo -e "${YELLOW}Renaming rembg.py to avoid circular import...${NC}"
-if [ -f "$HUNYUAN_DIR/hy3dshape/hy3dshape/rembg.py" ]; then
-    mv "$HUNYUAN_DIR/hy3dshape/hy3dshape/rembg.py" "$HUNYUAN_DIR/hy3dshape/hy3dshape/rembg_utils.py"
-    echo -e "${GREEN}✅ rembg.py renamed to rembg_utils.py${NC}"
-else
-    echo -e "${YELLOW}⚠️  rembg.py not found or already renamed${NC}"
-fi
-
-# ✅ FIX: Create comprehensive __init__.py for nested hy3dshape import
-echo -e "${YELLOW}Creating __init__.py for hy3dshape...${NC}"
-cat > "$HUNYUAN_DIR/hy3dshape/__init__.py" <<'INITPY'
-# Forward all imports from nested hy3dshape to top-level
-# This makes "from hy3dshape.xxx import Y" work as expected
-
-import sys
-
-# Import and re-export main modules
-from .hy3dshape.pipelines import Hunyuan3DDiTPipeline, Hunyuan3DDiTFlowMatchingPipeline
-from .hy3dshape import rembg_utils as rembg
-from .hy3dshape import preprocessors
-from .hy3dshape import postprocessors
-from .hy3dshape import schedulers
-from .hy3dshape import surface_loaders
-from .hy3dshape import utils
-from .hy3dshape import models
-
-# Make nested modules accessible as hy3dshape.module_name
-sys.modules['hy3dshape.rembg'] = rembg
-sys.modules['hy3dshape.preprocessors'] = preprocessors
-sys.modules['hy3dshape.postprocessors'] = postprocessors
-sys.modules['hy3dshape.schedulers'] = schedulers
-sys.modules['hy3dshape.surface_loaders'] = surface_loaders
-sys.modules['hy3dshape.utils'] = utils
-sys.modules['hy3dshape.models'] = models
-
-__all__ = [
-    "Hunyuan3DDiTPipeline",
-    "Hunyuan3DDiTFlowMatchingPipeline",
-    "rembg",
-    "preprocessors",
-    "postprocessors",
-    "schedulers",
-    "surface_loaders",
-    "utils",
-    "models"
-]
-INITPY
-
-echo -e "${GREEN}✅ hy3dshape/__init__.py created${NC}"
-
-# ✅ Add PYTHONPATH for both hy3dshape AND hy3dpaint
 VENV_ACTIVATE="venv/bin/activate"
-HUNYUAN_ABS_PATH=$(realpath "$HUNYUAN_DIR")
-HY3DPAINT_PATH="$HUNYUAN_ABS_PATH/hy3dpaint"
-DIFF_RENDERER_PATH="$HUNYUAN_ABS_PATH/hy3dpaint/DifferentiableRenderer"
-HY3DSHAPE_PATH="$HUNYUAN_ABS_PATH/hy3dshape"
-HY3DSHAPE_NESTED_PATH="$HUNYUAN_ABS_PATH/hy3dshape/hy3dshape"
+MV_ABS_PATH=$(realpath "$MV_DIR")
 
-# Remove old PYTHONPATH entries
+# Xóa entries cũ nếu có
 sed -i '/# Hunyuan3D/d' "$VENV_ACTIVATE"
 sed -i '/export PYTHONPATH.*hunyuan3d/d' "$VENV_ACTIVATE"
 
-# Add new comprehensive PYTHONPATH
+# Thêm path mới — chỉ cần MV_DIR vì hy3dgen là package chuẩn bên trong
 cat >> "$VENV_ACTIVATE" <<EOF
 
-# Hunyuan3D paths (auto-generated)
-export PYTHONPATH="$HUNYUAN_ABS_PATH:$HY3DPAINT_PATH:$DIFF_RENDERER_PATH:$HY3DSHAPE_PATH:$HY3DSHAPE_NESTED_PATH:\$PYTHONPATH"
+# Hunyuan3D-2mv path (auto-generated by quick_setup.sh)
+export PYTHONPATH="${MV_ABS_PATH}:\$PYTHONPATH"
 EOF
 
-echo -e "${GREEN}✅ PYTHONPATH added to venv activation${NC}"
+# Set cho session hiện tại
+export PYTHONPATH="${MV_ABS_PATH}:$PYTHONPATH"
 
-# Set for current session
-export PYTHONPATH="$HUNYUAN_ABS_PATH:$HY3DPAINT_PATH:$DIFF_RENDERER_PATH:$PYTHONPATH"
-echo -e "${GREEN}✅ PYTHONPATH set: $PYTHONPATH${NC}"
+echo -e "${GREEN}✅ PYTHONPATH set: ${MV_ABS_PATH}${NC}"
 
-# Verify imports
-echo -e "${YELLOW}Verifying Python imports...${NC}"
-python -c "
-import sys
-print('Python paths:')
-for p in sys.path[:5]:
-    print(f'  {p}')
-print('  ...')
-print()
-
-# Test 1: model_worker
-try:
-    from model_worker import ModelWorker
-    print('✅ model_worker import OK')
-except ImportError as e:
-    print(f'❌ model_worker import failed: {e}')
-    exit(1)
-
-# Test 2: Hunyuan3D Pipeline
-try:
-    from hy3dshape import Hunyuan3DDiTFlowMatchingPipeline
-    print('✅ Hunyuan3DDiTFlowMatchingPipeline import OK')
-except ImportError as e:
-    print(f'❌ Pipeline import failed: {e}')
-    exit(1)
-
-# Test 3: textureGenPipeline
-try:
-    from textureGenPipeline import Hunyuan3DPaintPipeline
-    print('✅ textureGenPipeline import OK')
-except ImportError as e:
-    print(f'⚠️  textureGenPipeline import failed: {e}')
-    print('   (Will be available after CUDA compilation)')
-" || true
-
-# ==========================================
-# STEP 8: Compile CUDA modules
-# ==========================================
-echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[8/12] COMPILING CUDA MODULES${NC}"
-echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
-
-# Install dependencies for compilation
-echo "Installing fake-bpy-module..."
-pip install fake-bpy-module-latest > /dev/null 2>&1
-echo -e "${GREEN}✅ fake-bpy-module installed${NC}"
-
-echo "Adjusting setuptools version..."
-pip install setuptools==69.5.1 > /dev/null 2>&1
-echo -e "${GREEN}✅ setuptools adjusted${NC}"
-
-if [ -d "hunyuan3d-2.1/hy3dpaint/custom_rasterizer" ]; then
-    echo "Compiling custom_rasterizer..."
-    cd hunyuan3d-2.1/hy3dpaint/custom_rasterizer
-    pip install -e . --no-build-isolation > /tmp/rasterizer_build.log 2>&1 && \
-        echo -e "${GREEN}✅ custom_rasterizer compiled${NC}" || \
-        echo -e "${RED}❌ Failed! Check /tmp/rasterizer_build.log${NC}"
-    cd ../../..
-else
-    echo -e "${YELLOW}⚠️  custom_rasterizer not found, skipping${NC}"
-fi
-
-if [ -d "hunyuan3d-2.1/hy3dpaint/DifferentiableRenderer" ]; then
-    echo "Compiling DifferentiableRenderer..."
-    cd hunyuan3d-2.1/hy3dpaint/DifferentiableRenderer
-    bash compile_mesh_painter.sh > /tmp/renderer_build.log 2>&1 && \
-        echo -e "${GREEN}✅ DifferentiableRenderer compiled${NC}" || \
-        echo -e "${RED}❌ Failed! Check /tmp/renderer_build.log${NC}"
-    cd ../../..
-else
-    echo -e "${YELLOW}⚠️  DifferentiableRenderer not found, skipping${NC}"
-fi
-
-# Final verification
-echo -e "${YELLOW}Final verification...${NC}"
-python -c "
-try:
-    from textureGenPipeline import Hunyuan3DPaintPipeline
-    print('✅ All CUDA modules compiled successfully!')
-except ImportError as e:
-    print(f'⚠️  textureGenPipeline: {e}')
-" 2>&1 | grep -E '✅|⚠️'
-
-# ==========================================
-# STEP 8.5: Configure LD_LIBRARY_PATH for CUDA extensions
-# ==========================================
-echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[8.5/12] CONFIGURING PYTORCH LIBRARY PATH${NC}"
-echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
-
-# Add PyTorch lib path to venv activate if not already present
+# Cấu hình LD_LIBRARY_PATH cho CUDA extensions
 if ! grep -q "TORCH_LIB_PATH" "$VENV_ACTIVATE"; then
-    echo -e "${YELLOW}Adding LD_LIBRARY_PATH to venv...${NC}"
     cat >> "$VENV_ACTIVATE" <<'EOF'
 
 # PyTorch C++ library path (for CUDA extensions)
@@ -463,104 +419,124 @@ if [ -n "$TORCH_LIB_PATH" ]; then
     export LD_LIBRARY_PATH="$TORCH_LIB_PATH:$LD_LIBRARY_PATH"
 fi
 EOF
-    echo -e "${GREEN}✅ LD_LIBRARY_PATH configured in venv${NC}"
-else
-    echo -e "${GREEN}✅ LD_LIBRARY_PATH already configured${NC}"
 fi
-
-# Set for current session
 export LD_LIBRARY_PATH=$(python -c "import torch, os; print(os.path.join(os.path.dirname(torch.__file__), 'lib'))" 2>/dev/null):$LD_LIBRARY_PATH
+echo -e "${GREEN}✅ LD_LIBRARY_PATH configured${NC}"
+
+# Verify imports
+echo -e "${YELLOW}Verifying hy3dgen imports...${NC}"
+python -c "
+import sys
+sys.path.insert(0, '${MV_ABS_PATH}')
+
+try:
+    from hy3dgen.rembg import BackgroundRemover
+    print('✅ hy3dgen.rembg OK')
+except ImportError as e:
+    print(f'❌ hy3dgen.rembg failed: {e}')
+
+try:
+    from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline
+    print('✅ hy3dgen.shapegen OK')
+except ImportError as e:
+    print(f'❌ hy3dgen.shapegen failed: {e}')
+
+try:
+    from hy3dgen.texgen import Hunyuan3DPaintPipeline
+    print('✅ hy3dgen.texgen OK')
+except ImportError as e:
+    print(f'⚠️  hy3dgen.texgen failed (expected before CUDA compile): {e}')
+" || true
 
 # ==========================================
-# STEP 9: Download AI weights
+# STEP 8: Compile CUDA modules (hunyuan3d-2mv)
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[9/12] DOWNLOADING AI WEIGHTS${NC}"
+echo -e "${MAGENTA}[8/10] COMPILING CUDA MODULES${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
-WEIGHT_PATH="hunyuan3d-2.1/hy3dpaint/ckpt/RealESRGAN_x4plus.pth"
-if [ ! -f "$WEIGHT_PATH" ]; then
-    mkdir -p hunyuan3d-2.1/hy3dpaint/ckpt
+pip install fake-bpy-module-latest > /dev/null 2>&1
+pip install setuptools==69.5.1 > /dev/null 2>&1
+echo -e "${GREEN}✅ Build tools ready${NC}"
+
+COMPILED=0
+
+# ── custom_rasterizer: tìm trong hy3dgen/texgen/ hoặc hy3dpaint/ ──
+for RASTER_PATH in \
+    "$MV_DIR/hy3dgen/texgen/custom_rasterizer" \
+    "$MV_DIR/hy3dpaint/custom_rasterizer"
+do
+    if [ -d "$RASTER_PATH" ]; then
+        echo -e "${YELLOW}Compiling custom_rasterizer ($RASTER_PATH)...${NC}"
+        pushd "$RASTER_PATH" > /dev/null
+        pip install -e . --no-build-isolation > /tmp/rasterizer_build.log 2>&1 \
+            && echo -e "${GREEN}✅ custom_rasterizer compiled${NC}" \
+            || echo -e "${RED}❌ Failed! Check /tmp/rasterizer_build.log${NC}"
+        popd > /dev/null
+        COMPILED=1
+        break
+    fi
+done
+
+# ── DifferentiableRenderer ──
+for DR_PATH in \
+    "$MV_DIR/hy3dgen/texgen/DifferentiableRenderer" \
+    "$MV_DIR/hy3dpaint/DifferentiableRenderer"
+do
+    if [ -d "$DR_PATH" ]; then
+        echo -e "${YELLOW}Compiling DifferentiableRenderer ($DR_PATH)...${NC}"
+        pushd "$DR_PATH" > /dev/null
+        if [ -f "compile_mesh_painter.sh" ]; then
+            bash compile_mesh_painter.sh > /tmp/renderer_build.log 2>&1 \
+                && echo -e "${GREEN}✅ DifferentiableRenderer compiled${NC}" \
+                || echo -e "${RED}❌ Failed! Check /tmp/renderer_build.log${NC}"
+        elif [ -f "setup.py" ]; then
+            pip install -e . --no-build-isolation > /tmp/renderer_build.log 2>&1 \
+                && echo -e "${GREEN}✅ DifferentiableRenderer compiled${NC}" \
+                || echo -e "${RED}❌ Failed! Check /tmp/renderer_build.log${NC}"
+        fi
+        popd > /dev/null
+        COMPILED=1
+        break
+    fi
+done
+
+if [ "$COMPILED" -eq 0 ]; then
+    echo -e "${YELLOW}⚠️  Không tìm thấy CUDA module folders, bỏ qua compile${NC}"
+    echo -e "${YELLOW}   (có thể đã compiled sẵn trong Drive archive)${NC}"
+fi
+
+# Kiểm tra RealESRGAN weights
+ESRGAN_PATH="$(pwd)/weights/RealESRGAN_x4plus.pth"
+if [ -f "$ESRGAN_PATH" ]; then
+    echo -e "${GREEN}✅ RealESRGAN_x4plus.pth có sẵn${NC}"
+else
+    echo -e "${YELLOW}⚠️  RealESRGAN_x4plus.pth không tìm thấy${NC}"
+    echo -e "${YELLOW}   Download từ GitHub...${NC}"
+    mkdir -p "$(pwd)/weights"
     wget -q --show-progress \
         https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth \
-        -P hunyuan3d-2.1/hy3dpaint/ckpt
-    echo -e "${GREEN}✅ Real-ESRGAN downloaded${NC}"
-else
-    echo -e "${GREEN}✅ Real-ESRGAN already exists${NC}"
+        -P "$(pwd)/weights" \
+        && echo -e "${GREEN}✅ RealESRGAN downloaded → weights/RealESRGAN_x4plus.pth${NC}" \
+        || echo -e "${YELLOW}⚠️  Download thất bại — 4K upscale sẽ bị skip${NC}"
 fi
 
 # ==========================================
-# STEP 9.5: Fix all hardcoded paths using pathlib
+# STEP 9: Create directories
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[9.5/12] FIXING ALL HARDCODED PATHS${NC}"
+echo -e "${MAGENTA}[9/10] CREATING DIRECTORIES${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
-# ✅ Part 1: Fix textureGenPipeline.py
-echo -e "${YELLOW}Fixing paths in textureGenPipeline.py...${NC}"
-TEXTURE_GEN_FILE="hunyuan3d-2.1/hy3dpaint/textureGenPipeline.py"
-
-# Add Path import after warnings import if not present
-if ! grep -q "from pathlib import Path" "$TEXTURE_GEN_FILE"; then
-    sed -i '/^import warnings/a from pathlib import Path' "$TEXTURE_GEN_FILE"
-    echo -e "${GREEN}✅ Added Path import${NC}"
-fi
-
-# Remove any existing script_dir lines in Hunyuan3DPaintConfig.__init__
-sed -i '/class Hunyuan3DPaintConfig:/,/class Hunyuan3DPaintPipeline:/ {
-    /script_dir = Path(__file__).parent.resolve()/d
-}' "$TEXTURE_GEN_FILE"
-
-# Add script_dir after self.device = "cuda"
-sed -i '/self.device = "cuda"/a\        script_dir = Path(__file__).parent.resolve()' "$TEXTURE_GEN_FILE"
-
-# Fix multiview_cfg_path to use pathlib
-sed -i 's|self\.multiview_cfg_path = "hy3dpaint/cfgs/hunyuan-paint-pbr\.yaml"|self.multiview_cfg_path = str(script_dir / "cfgs" / "hunyuan-paint-pbr.yaml")|' "$TEXTURE_GEN_FILE"
-
-# Fix realesrgan_ckpt_path to use pathlib (if still hardcoded)
-sed -i 's|self\.realesrgan_ckpt_path = "ckpt/RealESRGAN_x4plus\.pth"|self.realesrgan_ckpt_path = str(script_dir / "ckpt" / "RealESRGAN_x4plus.pth")|' "$TEXTURE_GEN_FILE"
-
-# Add dino_ckpt_path if not present
-if ! grep -q "dino_ckpt_path" "$TEXTURE_GEN_FILE"; then
-    sed -i '/self\.realesrgan_ckpt_path = str(script_dir/a\        self.dino_ckpt_path = "facebook/dinov2-large"  # HuggingFace model ID' "$TEXTURE_GEN_FILE"
-    echo -e "${GREEN}✅ Added dino_ckpt_path${NC}"
-fi
-
-echo -e "${GREEN}✅ textureGenPipeline.py paths fixed${NC}"
-
-# ✅ Part 2: Fix model_worker.py
-echo -e "${YELLOW}Removing hardcoded path overrides in model_worker.py...${NC}"
-MODEL_WORKER_FILE="hunyuan3d-2.1/model_worker.py"
-
-# Remove all hardcoded path assignments that override Hunyuan3DPaintConfig defaults
-sed -i '/conf\.realesrgan_ckpt_path = /d' "$MODEL_WORKER_FILE"
-sed -i '/conf\.multiview_cfg_path = /d' "$MODEL_WORKER_FILE"
-sed -i '/conf\.custom_pipeline = /d' "$MODEL_WORKER_FILE"
-
-echo -e "${GREEN}✅ model_worker.py hardcoded paths removed${NC}"
-
-# ✅ Part 3: Clear Python cache
-echo -e "${YELLOW}Clearing Python cache...${NC}"
-find hunyuan3d-2.1 -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-find hunyuan3d-2.1 -type f -name "*.pyc" -delete 2>/dev/null || true
-echo -e "${GREEN}✅ Python cache cleared${NC}"
-
-# ==========================================
-# STEP 10: Create directories
-# ==========================================
-echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[10/12] CREATING DIRECTORIES${NC}"
-echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
-
-mkdir -p utils/upload_temp utils/download utils/models_cache logs
-chmod 755 utils/upload_temp utils/download utils/models_cache
+mkdir -p utils/upload_temp utils/download utils/models_cache utils/gallery/images utils/gallery/models logs
+chmod 755 utils/upload_temp utils/download utils/models_cache utils/gallery/images utils/gallery/models
 echo -e "${GREEN}✅ Directories created${NC}"
 
 # ==========================================
-# STEP 11: Generate full .env
+# STEP 10: Generate .env + Init database
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[11/12] GENERATING .ENV FILE${NC}"
+echo -e "${MAGENTA}[10/10] GENERATING .ENV & INITIALIZING DATABASE${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 SECRET_KEY=$(openssl rand -hex 32)
@@ -605,7 +581,7 @@ SEPAY_WEBHOOK_SECRET=
 # =========================================
 # 🤖 HUNYUAN3D MODEL CONFIG
 # =========================================
-HUNYUAN3D_MODEL_PATH=./hunyuan3d-2.1
+HUNYUAN3D_MODEL_PATH=./hunyuan3d-2mv
 HUNYUAN3D_DEVICE=cuda
 
 # =========================================
@@ -623,33 +599,26 @@ API_HOST=0.0.0.0
 API_PORT=8000
 DEBUG=False
 LOG_LEVEL=INFO
+LOAD_MODEL_ON_STARTUP=True
 EOF
 
-echo -e "${GREEN}✅ .env created${NC}"
-echo "SECRET_KEY=$SECRET_KEY" >> ~/hunyuan3d_setup/env_config.txt
-echo "EXTERNAL_URL=$EXTERNAL_URL" >> ~/hunyuan3d_setup/env_config.txt
+echo -e "${GREEN}✅ .env generated${NC}"
 
-# ==========================================
-# STEP 12: Initialize database
-# ==========================================
-echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[12/12] INITIALIZING DATABASE${NC}"
-echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
-
+# Init database
 python -c "
 from app.models.base_db import Base, engine
 from app.models.user import User
 from app.models.task import ModelJob
 from app.models.payment import Payment
+from app.models.gallery_submission import GallerySubmission
 try:
     Base.metadata.create_all(bind=engine)
-    print('✅ Tables created: users, model_jobs, payments')
+    print('✅ Tables created: users, model_jobs, payments, gallery_submissions')
 except Exception as e:
     print(f'❌ Error: {e}')
     exit(1)
 "
-export DB_PASSWORD=$(grep "^Password:" ~/hunyuan3d_setup/mysql_credentials.txt | awk '{print $2}')
-mysql -u khuongn2k3 -p$DB_PASSWORD hunyuan3d_db -e "SHOW TABLES;" 2>/dev/null
+
 echo -e "${GREEN}✅ Database initialized${NC}"
 
 # ==========================================
@@ -665,20 +634,19 @@ echo -e "${GREEN}"
 cat << "EOF"
 ╔═══════════════════════════════════════════════════╗
 ║                                                   ║
-║          🎉 SETUP COMPLETED SUCCESSFULLY! 🎉     ║
+║       🎉 SETUP COMPLETED SUCCESSFULLY! 🎉        ║
 ║                                                   ║
 ╚═══════════════════════════════════════════════════╝
 EOF
 echo -e "${NC}"
 
 echo -e "${CYAN}⏱️  Total time: ${MINUTES}m ${SECS}s${NC}\n"
-echo -e "${GREEN}🚀 Quick Start:${NC}"
+echo -e "${GREEN}🚀 Khởi động server:${NC}"
 echo ""
 echo "  source venv/bin/activate"
 echo "  python run_api.py"
 echo ""
-echo ""
-echo -e "${YELLOW}⚠️  First inference slower (model loading)${NC}"
+echo -e "${YELLOW}⚠️  Lần inference đầu chậm hơn (model đang load vào VRAM)${NC}"
 echo -e "${CYAN}📄 Credentials: ~/hunyuan3d_setup/${NC}"
 echo ""
-echo -e "${GREEN}✅ All checks passed. Ready to run!${NC}"
+echo -e "${GREEN}✅ Ready! Chúc mừng bạn đã setup thành công Hunyuan3D-2mv! 🎨${NC}"

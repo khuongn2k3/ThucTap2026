@@ -64,6 +64,8 @@ class JobStatusResponse(BaseModel):
     status: str
     input_image_url: str
     output_model_url: Optional[str] = None
+    has_texture: bool = False
+    has_skeleton: bool = False
     error_message: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None

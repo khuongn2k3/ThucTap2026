@@ -266,8 +266,27 @@ class Hunyuan3DService:
             if job:
                 job.status = 'completed'
                 job.output_model_url = output_model_url
+
+                # Parse GLB to detect texture and skeleton
+                try:
+                    import struct
+                    with open(str(download_path), 'rb') as f:
+                        data = f.read()
+                    if len(data) > 20 and struct.unpack_from('<I', data, 0)[0] == 0x46546C67:
+                        json_len = struct.unpack_from('<I', data, 12)[0]
+                        import json as _json
+                        glb_json = _json.loads(data[20:20+json_len].decode('utf-8', errors='ignore'))
+                        job.has_skeleton = bool(glb_json.get('skins'))
+                        job.has_texture = bool(
+                            glb_json.get('textures') or
+                            any(m.get('pbrMetallicRoughness', {}).get('baseColorTexture')
+                                for m in glb_json.get('materials', []))
+                        )
+                except Exception as parse_err:
+                    print(f"⚠️ GLB parse warning: {parse_err}")
+
                 db.commit()
-                print(f"✅ Job {job_id} completed → {output_model_url}")
+                print(f"✅ Job {job_id} completed → {output_model_url} | texture={job.has_texture} skeleton={job.has_skeleton}")
             
             # Update cache
             if job_id in self.task_cache:

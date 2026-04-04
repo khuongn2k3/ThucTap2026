@@ -64,7 +64,7 @@ class Settings:
     # =========================================
     # HUNYUAN3D MODEL
     # =========================================
-    HUNYUAN3D_MODEL_PATH: str = os.getenv("HUNYUAN3D_MODEL_PATH", "./hunyuan3d-2.1")
+    HUNYUAN3D_MODEL_PATH: str = os.getenv("HUNYUAN3D_MODEL_PATH", "./hunyuan3d-2mv")
     @property
     def HUNYUAN3D_DEVICE(self) -> str:
         """Get device (cuda/cpu) with validation."""
@@ -103,6 +103,7 @@ class Settings:
     DEBUG: bool = os.getenv("DEBUG", "True").lower() in ("true", "1", "yes")
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     EXTERNAL_URL: str = os.getenv("EXTERNAL_URL", "http://localhost:8000")
+    LOAD_MODEL_ON_STARTUP: bool = os.getenv("LOAD_MODEL_ON_STARTUP", "False").lower() in ("true", "1", "yes")
     # =========================================
     # HELPER PROPERTIES
     # =========================================
