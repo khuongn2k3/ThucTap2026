@@ -36,7 +36,7 @@ Hunyuan3D-2/
 hunyuan3d-2.1/
 hunyuan3d-2mv/
 # ============================================
-# MODEL WEIGHTS & CACHE (RẤT NẶNG, KHÔNG PUSH)
+# MODEL WEIGHTS & CACHE 
 # ============================================
 utils/models_cache/
 utils/upload_temp/
@@ -47,7 +47,7 @@ utils/download/
 *.safetensors
 *.ckpt
 *.onnx
-
+!weights/RealESRGAN_x4plus.pth
 # ============================================
 # DATABASE
 # ============================================
