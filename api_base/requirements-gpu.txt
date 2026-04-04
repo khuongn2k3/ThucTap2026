@@ -1,16 +1,16 @@
---extra-index-url https://download.pytorch.org/whl/cu121
+--extra-index-url https://download.pytorch.org/whl/cu124
 --extra-index-url https://mirrors.aliyun.com/pypi/simple/
 --extra-index-url https://mirrors.cloud.tencent.com/pypi/simple/
 
 # =========================================
-# PYTORCH GPU (CUDA 12.1) - CRITICAL!
+# PYTORCH GPU (CUDA 12.4) - CRITICAL!
 # =========================================
 # Change cu121 to cu118/cu124 based on your GPU's CUDA version
 # Check with: nvidia-smi
 
-#torch==2.5.1+cu121
-#torchvision==0.20.1+cu121
-#torchaudio==2.5.1+cu121
+#torch==2.5.1+cu124
+#torchvision==0.20.1+cu124
+#torchaudio==2.5.1+cu124
 
 # =========================================
 # BUILD TOOLS
@@ -47,7 +47,6 @@ imageio==2.36.0
 scikit-image==0.24.0
 rembg==2.0.65
 realesrgan==0.3.0
-tb_nightly==2.18.0a20240726
 basicsr==1.4.2
 
 # =========================================
@@ -83,20 +82,14 @@ tqdm==4.66.5
 psutil==6.0.0
 
 # =========================================
-# GPU COMPUTING (requires CUDA 12.x)
+# GPU COMPUTING 
 # =========================================
-#cupy-cuda12x==13.4.1
 onnxruntime==1.16.3
-
-# =========================================
-# DISTRIBUTED TRAINING (Linux only)
-# =========================================
-# deepspeed  # Uncomment on Linux with CUDA
 
 # =========================================
 # BLENDER (Optional - for advanced mesh processing)
 # =========================================
-#bpy==3.6.0  # Very large, only install if needed
+#bpy==3.6.0  
 
 # =========================================
 # API & DATABASE
@@ -126,19 +119,4 @@ flake8==7.0.0
 isort==5.13.2
 ipython==8.19.0
 setuptools==69.5.1
-
-
-xformers==0.0.28.post1
-# =========================================
-# NOTES
-# =========================================
-# Total size: ~15-20 GB with CUDA
-# Installation time: 30-60 minutes
-# 
-# For Windows:
-# - deepspeed may fail (commented out)
-# - bpy is optional (3GB+)
-# 
-# For production deployment:
-# - Use this file for GPU servers
-# - Use requirements-cpu.txt for API-only servers
+xformers
