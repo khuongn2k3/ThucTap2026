@@ -218,7 +218,20 @@ if [ -d "venv" ]; then
     rm -rf venv
 fi
 
-python3.10 -m venv venv
+# Kiểm tra system python đã có torch + CUDA chưa
+if python3.10 -c "import torch; assert torch.cuda.is_available()" 2>/dev/null; then
+    SYS_TORCH=$(python3.10 -c "import torch; print(torch.__version__)")
+    SYS_GPU=$(python3.10 -c "import torch; print(torch.cuda.get_device_name(0))")
+    echo -e "${GREEN}✅ System đã có PyTorch ${SYS_TORCH} + CUDA (${SYS_GPU})${NC}"
+    echo -e "${CYAN}   Tạo venv với --system-site-packages để kế thừa torch${NC}"
+    python3.10 -m venv venv --system-site-packages
+    SYSTEM_TORCH=1
+else
+    echo -e "${CYAN}   Tạo venv độc lập (sẽ cài torch trong Step 4)${NC}"
+    python3.10 -m venv venv
+    SYSTEM_TORCH=0
+fi
+
 source venv/bin/activate
 
 echo -e "${GREEN}✅ Virtual environment: $(python --version)${NC}"
