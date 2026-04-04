@@ -308,7 +308,14 @@ echo -e "${MAGENTA}[5/10] INSTALLING PYTHON DEPENDENCIES${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 echo -e "${YELLOW}Cai packages, mat 15-30 phut...${NC}\n"
-pip install -r requirements-gpu.txt
+
+# Cai basicsr truoc voi --no-build-isolation de tranh pip tu tai torch (~530MB) trong khi da co san
+echo -e "${CYAN}Pre-installing basicsr (skip isolated build to reuse existing torch)...${NC}"
+pip install basicsr==1.4.2 --no-build-isolation \
+    && echo -e "${GREEN}✅ basicsr installed${NC}" \
+    || echo -e "${YELLOW}⚠️  basicsr install failed, se thu lai cung requirements...${NC}"
+
+pip install -r requirements-gpu.txt --no-build-isolation
 pip install gdown  # can de download Google Drive
 echo -e "\n${GREEN}✅ Dependencies installed${NC}"
 
