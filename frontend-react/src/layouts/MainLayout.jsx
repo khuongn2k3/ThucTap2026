@@ -3,9 +3,9 @@ import { Outlet } from "react-router-dom"
 
 export default function MainLayout() {
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div style={{ minHeight:"100vh", background:"#080808" }}>
       <Navbar />
-      <main className="p-6">
+      <main>
         <Outlet />
       </main>
     </div>

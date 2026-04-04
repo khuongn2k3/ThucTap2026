@@ -8,7 +8,7 @@ echo Database Setup for Hunyuan3D
 echo ================================================
 
 REM MySQL Path - CHANGE THIS TO YOUR XAMPP PATH
-set MYSQL_PATH=C:\xampp\mysql\bin
+set MYSQL_PATH=E:\xampp\mysql\bin
 set PATH=%MYSQL_PATH%;%PATH%
 
 REM Check MySQL

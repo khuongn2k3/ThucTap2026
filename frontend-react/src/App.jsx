@@ -4,16 +4,13 @@ import RequireAuth from "./components/RequireAuth"
 import RequireAdmin from "./components/RequireAdmin"
 
 import MainLayout from "./layouts/MainLayout"
-import AuthLayout from "./layouts/AuthLayout"
 
+import Home from "./pages/Home"
 import Convert3D from "./pages/Convert3D"
-import Login from "./pages/Login"
-import Register from "./pages/Register"
 import OAuthSuccess from "./pages/OAuthSuccess"
 import Dashboard from "./pages/Dashboard"
 import Admin from "./pages/Admin"
-import History from "./pages/History"
-import Profile from "./pages/Profile"
+import Asset from "./pages/Asset"
 
 export default function App() {
   return (
@@ -21,29 +18,20 @@ export default function App() {
       <Routes>
 
         {/* ===== PUBLIC ===== */}
-        <Route element={<AuthLayout />}>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+        <Route element={<MainLayout />}>
+          <Route path="/" element={<Home />} />
+          <Route path="/3d-model/:slug" element={<Home />} />
           <Route path="/oauth-success" element={<OAuthSuccess />} />
         </Route>
 
-        <Route element={<RequireAuth />}>
-          <Route element={<MainLayout />}>
-            <Route path="/" element={<Convert3D />} />
+        {/* ===== PROTECTED ===== */}
+        <Route element={<MainLayout />}>
+            <Route path="/convert" element={<Convert3D />} />
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/history" element={<History />} />
-            <Route path="/profile" element={<Profile />} />
+            <Route path="/history" element={<Asset />} />
 
             {/* ===== ADMIN ONLY ===== */}
-            <Route
-              path="/admin"
-              element={
-                <RequireAdmin>
-                  <Admin />
-                </RequireAdmin>
-              }
-            />
-          </Route>
+            <Route path="/admin" element={<RequireAdmin><Admin /></RequireAdmin>} />
         </Route>
 
       </Routes>
