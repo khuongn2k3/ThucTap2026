@@ -252,6 +252,15 @@ source venv/bin/activate
 
 echo -e "${GREEN}✅ Virtual environment: $(python --version)${NC}"
 
+# Neu torch nam trong venv khac (vi du /venv/main), add site-packages vao .pth
+if [ "$SYSTEM_TORCH" -eq 1 ] && ! python -c "import torch" 2>/dev/null; then
+    TORCH_SITE=$($TORCH_PYTHON -c "import site; print(site.getsitepackages()[0])" 2>/dev/null)
+    if [ -n "$TORCH_SITE" ]; then
+        echo "$TORCH_SITE" > venv/lib/python3.10/site-packages/vastai_torch.pth
+        echo -e "${GREEN}✅ Linked torch site-packages: $TORCH_SITE${NC}"
+    fi
+fi
+
 pip install --upgrade pip setuptools wheel > /dev/null 2>&1
 echo -e "${GREEN}✅ pip upgraded${NC}"
 
