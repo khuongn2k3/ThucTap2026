@@ -160,6 +160,7 @@ for PY_BIN in "${PYTHON_CANDIDATES[@]}"; do
             TORCH_VER=$($PY_BIN -c "import torch; print(torch.__version__)")
             echo -e "${GREEN}✅ PyTorch: ${TORCH_VER} + CUDA (via ${PY_BIN}) — se bo qua cai o Step 4${NC}"
             SYSTEM_TORCH=1
+            TORCH_PYTHON="$PY_BIN"
             break
         fi
     fi
