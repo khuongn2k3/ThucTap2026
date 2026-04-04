@@ -12,11 +12,11 @@ MAGENTA='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# ── Điền thông tin Google OAuth của bạn ──
+# ── Dien thong tin Google OAuth cua ban ──
 GOOGLE_CLIENT_ID="YOUR_GOOGLE_CLIENT_ID_HERE"
 GOOGLE_CLIENT_SECRET="YOUR_GOOGLE_CLIENT_SECRET_HERE"
 
-# ── Google Drive file ID chứa toàn bộ project ──
+# ── Google Drive file ID chua toan bo project ──
 DRIVE_FILE_ID="1MnySWoKd7VhtebHnv1LUyPkZPDuRYlEL"
 
 clear
@@ -26,7 +26,7 @@ cat << "EOF"
 ║                                                   ║
 ║   🚀 HUNYUAN3D-2MV GPU SERVER AUTO SETUP 🚀      ║
 ║                                                   ║
-║   Chạy xong đi uống trà, về test luôn! 🍵        ║
+║   Chay xong di uong tra, ve test luon! 🍵        ║
 ║                                                   ║
 ╚═══════════════════════════════════════════════════╝
 EOF
@@ -37,57 +37,57 @@ echo "  ✓ Check system requirements"
 echo "  ✓ Install MySQL server"
 echo "  ✓ Setup Python 3.10 environment"
 echo "  ✓ Install all dependencies"
-echo "  ✓ Download project từ Google Drive"
+echo "  ✓ Download project tu Google Drive"
 echo "  ✓ Compile CUDA modules (hunyuan3d-2mv)"
 echo "  ✓ Create database & tables"
 echo "  ✓ Generate full .env file"
 echo ""
-echo -e "${YELLOW}⏱️  Estimated time: 30-50 minutes${NC}"
-echo -e "${YELLOW}💾 Download: từ Google Drive của bạn${NC}"
+echo -e "${YELLOW}⏱️  Thoi gian uoc tinh: 30-50 phut${NC}"
+echo -e "${YELLOW}💾 Download: tu Google Drive cua ban${NC}"
 echo ""
 
-read -p "Press ENTER to start or Ctrl+C to cancel..."
+read -p "Nhan ENTER de bat dau hoac Ctrl+C de huy..."
 
-# ── Nhập IP thuê hoặc domain ngoài (tuỳ chọn) ──
+# ── Nhap IP thue hoac domain ngoai (tuy chon) ──
 echo ""
 echo -e "${CYAN}╔══════════════════════════════════════════════════════════╗${NC}"
-echo -e "${CYAN}║        🌐 CẤU HÌNH IP / DOMAIN BÊN NGOÀI (OPTIONAL)     ║${NC}"
+echo -e "${CYAN}║        🌐 CAU HINH IP / DOMAIN BEN NGOAI (OPTIONAL)     ║${NC}"
 echo -e "${CYAN}╚══════════════════════════════════════════════════════════╝${NC}"
-echo -e "${YELLOW}Nhập IP thuê hoặc domain đầy đủ (có hoặc không có https://).${NC}"
-echo -e "${YELLOW}Ví dụ:${NC}"
-echo -e "${CYAN}  IP thuê    : 203.0.113.45${NC}"
+echo -e "${YELLOW}Nhap IP thue hoac domain day du (co hoac khong co https://).${NC}"
+echo -e "${YELLOW}Vi du:${NC}"
+echo -e "${CYAN}  IP thue    : 203.0.113.45${NC}"
 echo -e "${CYAN}  Cloudflare : https://abc-xyz.trycloudflare.com${NC}"
-echo -e "${YELLOW}Để trống và nhấn ENTER nếu chỉ dùng localhost.${NC}"
+echo -e "${YELLOW}De trong va nhan ENTER neu chi dung localhost.${NC}"
 echo ""
-read -p "🖥️  Nhập IP hoặc domain (hoặc ENTER để bỏ qua): " EXTERNAL_INPUT
+read -p "🖥️  Nhap IP hoac domain (hoac ENTER de bo qua): " EXTERNAL_INPUT
 
 if [ -n "$EXTERNAL_INPUT" ]; then
-    # Kiểm tra nếu đã có http:// hoặc https:// thì dùng nguyên
+    # Kiem tra neu da co http:// hoac https:// thi dung nguyen
     if [[ "$EXTERNAL_INPUT" =~ ^https?:// ]]; then
-        # Domain đầy đủ (VD: Cloudflare Tunnel)
-        EXTERNAL_BASE="${EXTERNAL_INPUT%/}"   # bỏ trailing slash nếu có
-        # Xác định scheme
+        # Domain day du (VD: Cloudflare Tunnel)
+        EXTERNAL_BASE="${EXTERNAL_INPUT%/}"   # bo trailing slash neu co
+        # Xac dinh scheme
         SCHEME=$(echo "$EXTERNAL_BASE" | grep -o '^https\?')
         DOMAIN=$(echo "$EXTERNAL_BASE" | sed 's|^https\?://||')
         ALLOWED_ORIGINS="http://localhost:3000,http://localhost:5173,${EXTERNAL_BASE}"
         GOOGLE_REDIRECT_URI="${EXTERNAL_BASE}/api/v1/auth/google/callback"
         EXTERNAL_URL="${EXTERNAL_BASE}"
-        echo -e "${GREEN}✅ Domain ngoài: $EXTERNAL_BASE${NC}"
-        echo -e "${CYAN}   (dạng domain đầy đủ — không ghép port)${NC}"
+        echo -e "${GREEN}✅ Domain ngoai: $EXTERNAL_BASE${NC}"
+        echo -e "${CYAN}   (dang domain day du — khong ghep port)${NC}"
     else
-        # Chỉ là IP thuần (VD: 203.0.113.45)
+        # Chi la IP thuan (VD: 203.0.113.45)
         EXTERNAL_BASE="http://${EXTERNAL_INPUT}"
         ALLOWED_ORIGINS="http://localhost:3000,http://localhost:5173,http://${EXTERNAL_INPUT}:3000,http://${EXTERNAL_INPUT}:5173,http://${EXTERNAL_INPUT}:8000"
         GOOGLE_REDIRECT_URI="http://${EXTERNAL_INPUT}:8000/api/v1/auth/google/callback"
         EXTERNAL_URL="http://${EXTERNAL_INPUT}:8000"
-        echo -e "${GREEN}✅ IP thuê: $EXTERNAL_INPUT${NC}"
-        echo -e "${CYAN}   (dạng IP — tự ghép port 8000)${NC}"
+        echo -e "${GREEN}✅ IP thue: $EXTERNAL_INPUT${NC}"
+        echo -e "${CYAN}   (dang IP — tu ghep port 8000)${NC}"
     fi
     echo -e "${CYAN}   ALLOWED_ORIGINS : $ALLOWED_ORIGINS${NC}"
     echo -e "${CYAN}   EXTERNAL_URL     : $EXTERNAL_URL${NC}"
     echo -e "${CYAN}   REDIRECT_URI     : $GOOGLE_REDIRECT_URI${NC}"
 else
-    echo -e "${CYAN}ℹ️  Chỉ dùng localhost${NC}"
+    echo -e "${CYAN}ℹ️  Chi dung localhost${NC}"
     ALLOWED_ORIGINS="http://localhost:3000,http://localhost:5173"
     GOOGLE_REDIRECT_URI="http://localhost:8000/api/v1/auth/google/callback"
     EXTERNAL_URL="http://localhost:8000"
@@ -111,13 +111,13 @@ echo -e "${GREEN}✅ Internet connection OK${NC}"
 
 AVAILABLE_GB=$(df -BG . | tail -1 | awk '{print $4}' | sed 's/G//')
 if [ "$AVAILABLE_GB" -lt 30 ]; then
-    echo -e "${RED}❌ Need at least 30GB free space. Available: ${AVAILABLE_GB}GB${NC}"
+    echo -e "${RED}❌ Can it nhat 30GB disk. Hien co: ${AVAILABLE_GB}GB${NC}"
     exit 1
 fi
 echo -e "${GREEN}✅ Disk space: ${AVAILABLE_GB}GB available${NC}"
 
 if ! command -v nvidia-smi &> /dev/null; then
-    echo -e "${RED}❌ nvidia-smi not found! Cần GPU để chạy Hunyuan3D${NC}"
+    echo -e "${RED}❌ nvidia-smi not found! Can GPU de chay Hunyuan3D${NC}"
     exit 1
 fi
 
@@ -131,16 +131,32 @@ echo -e "${GREEN}✅ VRAM: ${GPU_MEMORY_GB} GB${NC}"
 echo -e "${GREEN}✅ CUDA: $CUDA_VERSION${NC}"
 
 if [ "$GPU_MEMORY_GB" -lt 16 ]; then
-    echo -e "${YELLOW}⚠️  Hunyuan3D-2mv cần ~14GB VRAM. Hiện có ${GPU_MEMORY_GB}GB${NC}"
-    echo -e "${YELLOW}   Shape + Texture không thể chạy đồng thời.${NC}"
+    echo -e "${YELLOW}⚠️  Hunyuan3D-2mv can ~14GB VRAM. Hien co ${GPU_MEMORY_GB}GB${NC}"
+    echo -e "${YELLOW}   Shape + Texture khong the chay dong thoi.${NC}"
 fi
 
 if [ ! -f "requirements-gpu.txt" ] || [ ! -f "run_api.py" ]; then
-    echo -e "${RED}❌ Script phải chạy từ trong thư mục api_base/${NC}"
+    echo -e "${RED}❌ Script phai chay tu trong thu muc api_base/${NC}"
     echo "   cd api_base && bash quick_setup.sh"
     exit 1
 fi
 echo -e "${GREEN}✅ Running from api_base/ — OK${NC}"
+
+# Check torch + CUDA ngay tu dau
+SYSTEM_TORCH=0
+for PY_BIN in python3.10 python3 python; do
+    if command -v "$PY_BIN" &>/dev/null; then
+        if $PY_BIN -c "import torch; assert torch.cuda.is_available()" 2>/dev/null; then
+            TORCH_VER=$($PY_BIN -c "import torch; print(torch.__version__)")
+            echo -e "${GREEN}✅ PyTorch: ${TORCH_VER} + CUDA (via ${PY_BIN}) — se bo qua cai o Step 4${NC}"
+            SYSTEM_TORCH=1
+            break
+        fi
+    fi
+done
+if [ "$SYSTEM_TORCH" -eq 0 ]; then
+    echo -e "${YELLOW}⚠️  PyTorch chua co — se tai o Step 4${NC}"
+fi
 
 echo -e "\n${GREEN}✅ All pre-flight checks passed!${NC}"
 sleep 1
@@ -160,7 +176,7 @@ apt install -y \
     build-essential ninja-build \
     > /dev/null 2>&1
 
-# Cài Python 3.10 nếu chưa có
+# Cai Python 3.10 neu chua co
 if ! command -v python3.10 &> /dev/null; then
     echo "Installing Python 3.10..."
     add-apt-repository ppa:deadsnakes/ppa -y > /dev/null 2>&1
@@ -213,24 +229,14 @@ echo -e "${MAGENTA}[3/10] CREATING VIRTUAL ENVIRONMENT (Python 3.10)${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 if [ -d "venv" ]; then
-    echo -e "${YELLOW}⚠️  venv/ exists, removing and recreating...${NC}"
+    echo -e "${YELLOW}⚠️  venv/ da ton tai, dang xoa va tao lai...${NC}"
     deactivate 2>/dev/null || true
     rm -rf venv
 fi
 
-# Kiểm tra system python đã có torch + CUDA chưa
-if python3.10 -c "import torch; assert torch.cuda.is_available()" 2>/dev/null; then
-    SYS_TORCH=$(python3.10 -c "import torch; print(torch.__version__)")
-    SYS_GPU=$(python3.10 -c "import torch; print(torch.cuda.get_device_name(0))")
-    echo -e "${GREEN}✅ System đã có PyTorch ${SYS_TORCH} + CUDA (${SYS_GPU})${NC}"
-    echo -e "${CYAN}   Tạo venv với --system-site-packages để kế thừa torch${NC}"
-    python3.10 -m venv venv --system-site-packages
-    SYSTEM_TORCH=1
-else
-    echo -e "${CYAN}   Tạo venv độc lập (sẽ cài torch trong Step 4)${NC}"
-    python3.10 -m venv venv
-    SYSTEM_TORCH=0
-fi
+# Luon tao venv voi --system-site-packages de ke thua torch tu image
+echo -e "${CYAN}   Tao venv voi --system-site-packages (ke thua torch tu system)${NC}"
+python3.10 -m venv venv --system-site-packages
 
 source venv/bin/activate
 
@@ -257,18 +263,18 @@ else
 fi
 echo "CUDA wheel: $CUDA_WHEEL"
 
-# Comment out torch trong requirements để tránh conflict
+# Comment out torch trong requirements de tranh conflict
 sed -i 's/^torch==/#torch==/' requirements-gpu.txt
 sed -i 's/^torchvision==/#torchvision==/' requirements-gpu.txt
 sed -i 's/^torchaudio==/#torchaudio==/' requirements-gpu.txt
 
-# Kiểm tra torch + CUDA đã có sẵn chưa
+# Kiem tra torch + CUDA da co san
 if python -c "import torch; assert torch.cuda.is_available()" 2>/dev/null; then
     TORCH_VER=$(python -c "import torch; print(torch.__version__)")
     GPU_DEV=$(python -c "import torch; print(torch.cuda.get_device_name(0))")
-    echo -e "${GREEN}✅ PyTorch ${TORCH_VER} + CUDA đã có sẵn (${GPU_DEV}), bỏ qua cài${NC}"
+    echo -e "${GREEN}✅ PyTorch ${TORCH_VER} + CUDA da co san (${GPU_DEV}), bo qua cai${NC}"
 else
-    echo -e "${YELLOW}PyTorch chưa có hoặc CUDA chưa khả dụng, đang cài với wheel: $CUDA_WHEEL...${NC}"
+    echo -e "${YELLOW}PyTorch chua co hoac CUDA chua kha dung, dang cai voi wheel: $CUDA_WHEEL...${NC}"
     pip install torch torchvision torchaudio \
         --index-url https://download.pytorch.org/whl/${CUDA_WHEEL}
     echo -e "${GREEN}✅ PyTorch installed${NC}"
@@ -281,9 +287,9 @@ echo -e "\n${MAGENTA}═══════════════════�
 echo -e "${MAGENTA}[5/10] INSTALLING PYTHON DEPENDENCIES${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
-echo -e "${YELLOW}Cài packages, mất 15-30 phút...${NC}\n"
+echo -e "${YELLOW}Cai packages, mat 15-30 phut...${NC}\n"
 pip install -r requirements-gpu.txt
-pip install gdown  # cần để download Google Drive
+pip install gdown  # can de download Google Drive
 echo -e "\n${GREEN}✅ Dependencies installed${NC}"
 
 # Verify PyTorch + CUDA
@@ -299,7 +305,7 @@ else:
 "
 
 # ==========================================
-# STEP 6: Download project từ Google Drive
+# STEP 6: Download project tu Google Drive
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
 echo -e "${MAGENTA}[6/10] DOWNLOADING & EXTRACTING FROM GOOGLE DRIVE${NC}"
@@ -308,42 +314,42 @@ echo -e "${MAGENTA}════════════════════�
 MV_DIR="./hunyuan3d-2mv"
 
 if [ -d "$MV_DIR" ] && [ -d "$MV_DIR/hy3dgen" ] && [ -d "$MV_DIR/hunyuan3d-dit-v2-mv-fast" ]; then
-    echo -e "${GREEN}✅ hunyuan3d-2mv/ đã tồn tại và đầy đủ, bỏ qua download${NC}"
+    echo -e "${GREEN}✅ hunyuan3d-2mv/ da ton tai va day du, bo qua download${NC}"
 else
-    # Cài pv để có progress bar khi stream
+    # Cai pv de co progress bar khi stream
     apt install -y pv > /dev/null 2>&1 && PV_OK=1 || PV_OK=0
 
-    echo -e "${YELLOW}📥 Đang tải + giải nén song song (stream)...${NC}"
-    echo -e "${CYAN}   File ~9GB — ước tính 3–10 phút tuỳ băng thông${NC}\n"
+    echo -e "${YELLOW}📥 Dang tai + giai nen song song (stream)...${NC}"
+    echo -e "${CYAN}   File ~9GB — uoc tinh 3-10 phut tuy bang thong${NC}\n"
 
     STREAM_OK=0
 
-    # ── Thử stream: tải + giải nén cùng lúc, không lưu .tar.gz ──
+    # ── Thu stream: tai + giai nen cung luc, khong luu .tar.gz ──
     if [ "$PV_OK" -eq 1 ]; then
-        echo -e "${CYAN}   [Mode] Stream với progress bar (pv)${NC}"
+        echo -e "${CYAN}   [Mode] Stream voi progress bar (pv)${NC}"
         python -m gdown "https://drive.google.com/uc?id=${DRIVE_FILE_ID}" \
             --fuzzy -O - 2>/dev/null \
             | pv -s 9G -name "  Downloading" \
             | tar -xz -C . \
             && STREAM_OK=1
     else
-        echo -e "${CYAN}   [Mode] Stream không có pv${NC}"
+        echo -e "${CYAN}   [Mode] Stream khong co pv${NC}"
         python -m gdown "https://drive.google.com/uc?id=${DRIVE_FILE_ID}" \
             --fuzzy -O - 2>/dev/null \
             | tar -xz -C . \
             && STREAM_OK=1
     fi
 
-    # ── Fallback: tải file rồi giải nén ──
+    # ── Fallback: tai file roi giai nen ──
     if [ "$STREAM_OK" -eq 0 ]; then
-        echo -e "${YELLOW}⚠️  Stream thất bại, fallback: tải file rồi giải nén...${NC}"
+        echo -e "${YELLOW}⚠️  Stream that bai, fallback: tai file roi giai nen...${NC}"
         DRIVE_ARCHIVE="./drive_download.tar.gz"
 
-        # Thử gdown
+        # Thu gdown
         if ! python -m gdown "https://drive.google.com/uc?id=${DRIVE_FILE_ID}" \
                 --fuzzy -O "$DRIVE_ARCHIVE"; then
             # Fallback curl
-            echo -e "${YELLOW}gdown thất bại, thử curl...${NC}"
+            echo -e "${YELLOW}gdown that bai, thu curl...${NC}"
             curl -c /tmp/gdrive_cookie.txt -s -L \
                 "https://drive.google.com/uc?export=download&id=${DRIVE_FILE_ID}" \
                 | grep -o 'confirm=[^&"]*' | head -1 > /tmp/gdrive_confirm.txt
@@ -353,18 +359,18 @@ else
                 -o "$DRIVE_ARCHIVE"
         fi
 
-        # Kiểm tra file
+        # Kiem tra file
         ARCHIVE_SIZE=$(du -m "$DRIVE_ARCHIVE" 2>/dev/null | cut -f1)
         echo -e "${CYAN}   File size: ${ARCHIVE_SIZE} MB${NC}"
         if [ "${ARCHIVE_SIZE:-0}" -lt 10 ]; then
-            echo -e "${RED}❌ File download quá nhỏ (${ARCHIVE_SIZE} MB) — bị block bởi Google Drive${NC}"
-            echo -e "${YELLOW}   Giải pháp: share file Drive dạng 'Anyone with link' rồi chạy lại${NC}"
+            echo -e "${RED}❌ File download qua nho (${ARCHIVE_SIZE} MB) — bi block boi Google Drive${NC}"
+            echo -e "${YELLOW}   Giai phap: share file Drive dang 'Anyone with link' roi chay lai${NC}"
             rm -f "$DRIVE_ARCHIVE"
             exit 1
         fi
 
-        # Giải nén với progress
-        echo -e "${YELLOW}📦 Đang giải nén...${NC}"
+        # Giai nen voi progress
+        echo -e "${YELLOW}📦 Dang giai nen...${NC}"
         if [ "$PV_OK" -eq 1 ]; then
             pv "$DRIVE_ARCHIVE" | tar -xz -C .
         else
@@ -372,27 +378,27 @@ else
         fi
 
         rm -f "$DRIVE_ARCHIVE"
-        echo -e "${GREEN}✅ Giải nén xong, đã xoá file .tar.gz${NC}"
+        echo -e "${GREEN}✅ Giai nen xong, da xoa file .tar.gz${NC}"
     fi
 
-    # ── Xác nhận cấu trúc sau giải nén ──
+    # ── Xac nhan cau truc sau giai nen ──
     if [ ! -d "$MV_DIR" ]; then
-        # Trường hợp tar giải nén không có wrapper folder
+        # Truong hop tar giai nen khong co wrapper folder
         if [ -d "./hy3dgen" ]; then
             mkdir -p "$MV_DIR"
             mv ./hy3dgen ./hunyuan3d-dit-v2-mv-fast ./hunyuan3d-paint-v2-0-turbo "$MV_DIR/" 2>/dev/null || true
-            echo -e "${GREEN}✅ Đã gom vào hunyuan3d-2mv/${NC}"
+            echo -e "${GREEN}✅ Da gom vao hunyuan3d-2mv/${NC}"
         else
-            echo -e "${RED}❌ Không tìm thấy hunyuan3d-2mv/ sau khi giải nén${NC}"
-            echo -e "${YELLOW}   Kiểm tra cấu trúc: ls -la ./${NC}"
+            echo -e "${RED}❌ Khong tim thay hunyuan3d-2mv/ sau khi giai nen${NC}"
+            echo -e "${YELLOW}   Kiem tra cau truc: ls -la ./${NC}"
             exit 1
         fi
     fi
 
-    echo -e "${GREEN}✅ hunyuan3d-2mv/ sẵn sàng${NC}"
+    echo -e "${GREEN}✅ hunyuan3d-2mv/ san sang${NC}"
 fi
 
-# Verify cấu trúc
+# Verify cau truc
 echo -e "${YELLOW}Verifying hunyuan3d-2mv structure...${NC}"
 [ -d "$MV_DIR/hy3dgen" ]                           && echo -e "${GREEN}  ✅ hy3dgen/ (package)${NC}"            || echo -e "${RED}  ❌ hy3dgen/ MISSING${NC}"
 [ -d "$MV_DIR/hunyuan3d-dit-v2-mv-fast" ]          && echo -e "${GREEN}  ✅ hunyuan3d-dit-v2-mv-fast/ (shape model)${NC}" || echo -e "${RED}  ❌ hunyuan3d-dit-v2-mv-fast/ MISSING${NC}"
@@ -408,23 +414,23 @@ echo -e "${MAGENTA}════════════════════�
 VENV_ACTIVATE="venv/bin/activate"
 MV_ABS_PATH=$(realpath "$MV_DIR")
 
-# Xóa entries cũ nếu có
+# Xoa entries cu neu co
 sed -i '/# Hunyuan3D/d' "$VENV_ACTIVATE"
 sed -i '/export PYTHONPATH.*hunyuan3d/d' "$VENV_ACTIVATE"
 
-# Thêm path mới — chỉ cần MV_DIR vì hy3dgen là package chuẩn bên trong
+# Them path moi — chi can MV_DIR vi hy3dgen la package chuan ben trong
 cat >> "$VENV_ACTIVATE" <<EOF
 
 # Hunyuan3D-2mv path (auto-generated by quick_setup.sh)
 export PYTHONPATH="${MV_ABS_PATH}:\$PYTHONPATH"
 EOF
 
-# Set cho session hiện tại
+# Set cho session hien tai
 export PYTHONPATH="${MV_ABS_PATH}:$PYTHONPATH"
 
 echo -e "${GREEN}✅ PYTHONPATH set: ${MV_ABS_PATH}${NC}"
 
-# Cấu hình LD_LIBRARY_PATH cho CUDA extensions
+# Cau hinh LD_LIBRARY_PATH cho CUDA extensions
 if ! grep -q "TORCH_LIB_PATH" "$VENV_ACTIVATE"; then
     cat >> "$VENV_ACTIVATE" <<'EOF'
 
@@ -476,7 +482,7 @@ echo -e "${GREEN}✅ Build tools ready${NC}"
 
 COMPILED=0
 
-# ── custom_rasterizer: tìm trong hy3dgen/texgen/ hoặc hy3dpaint/ ──
+# ── custom_rasterizer: tim trong hy3dgen/texgen/ hoac hy3dpaint/ ──
 for RASTER_PATH in \
     "$MV_DIR/hy3dgen/texgen/custom_rasterizer" \
     "$MV_DIR/hy3dpaint/custom_rasterizer"
@@ -517,23 +523,23 @@ do
 done
 
 if [ "$COMPILED" -eq 0 ]; then
-    echo -e "${YELLOW}⚠️  Không tìm thấy CUDA module folders, bỏ qua compile${NC}"
-    echo -e "${YELLOW}   (có thể đã compiled sẵn trong Drive archive)${NC}"
+    echo -e "${YELLOW}⚠️  Khong tim thay CUDA module folders, bo qua compile${NC}"
+    echo -e "${YELLOW}   (co the da compiled san trong Drive archive)${NC}"
 fi
 
-# Kiểm tra RealESRGAN weights
+# Kiem tra RealESRGAN weights
 ESRGAN_PATH="$(pwd)/weights/RealESRGAN_x4plus.pth"
 if [ -f "$ESRGAN_PATH" ]; then
-    echo -e "${GREEN}✅ RealESRGAN_x4plus.pth có sẵn${NC}"
+    echo -e "${GREEN}✅ RealESRGAN_x4plus.pth co san${NC}"
 else
-    echo -e "${YELLOW}⚠️  RealESRGAN_x4plus.pth không tìm thấy${NC}"
-    echo -e "${YELLOW}   Download từ GitHub...${NC}"
+    echo -e "${YELLOW}⚠️  RealESRGAN_x4plus.pth khong tim thay${NC}"
+    echo -e "${YELLOW}   Download tu GitHub...${NC}"
     mkdir -p "$(pwd)/weights"
     wget -q --show-progress \
         https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth \
         -P "$(pwd)/weights" \
         && echo -e "${GREEN}✅ RealESRGAN downloaded → weights/RealESRGAN_x4plus.pth${NC}" \
-        || echo -e "${YELLOW}⚠️  Download thất bại — 4K upscale sẽ bị skip${NC}"
+        || echo -e "${YELLOW}⚠️  Download that bai — 4K upscale se bi skip${NC}"
 fi
 
 # ==========================================
@@ -656,12 +662,12 @@ EOF
 echo -e "${NC}"
 
 echo -e "${CYAN}⏱️  Total time: ${MINUTES}m ${SECS}s${NC}\n"
-echo -e "${GREEN}🚀 Khởi động server:${NC}"
+echo -e "${GREEN}🚀 Khoi dong server:${NC}"
 echo ""
 echo "  source venv/bin/activate"
 echo "  python run_api.py"
 echo ""
-echo -e "${YELLOW}⚠️  Lần inference đầu chậm hơn (model đang load vào VRAM)${NC}"
+echo -e "${YELLOW}⚠️  Lan inference dau cham hon (model dang load vao VRAM)${NC}"
 echo -e "${CYAN}📄 Credentials: ~/hunyuan3d_setup/${NC}"
 echo ""
-echo -e "${GREEN}✅ Ready! Chúc mừng bạn đã setup thành công Hunyuan3D-2mv! 🎨${NC}"
+echo -e "${GREEN}✅ Ready! Chuc mung ban da setup thanh cong Hunyuan3D-2mv! 🎨${NC}"
