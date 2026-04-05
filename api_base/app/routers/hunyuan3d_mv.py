@@ -6,7 +6,7 @@ Hunyuan3D-2mv Router - 2 endpoint tách biệt:
 from fastapi import APIRouter, HTTPException, Depends, File, UploadFile, Form
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
-from typing import Optional, Dict
+from typing import Any, Dict, Optional
 from sqlalchemy.orm import Session
 from pathlib import Path
 import base64
@@ -43,6 +43,8 @@ class ShapeRequest(BaseModel):
         description='Ảnh base64 theo góc. "front" bắt buộc, "left"/"back"/"right" tùy chọn.'
     )
     input_image_url: str = Field(..., description="URL ảnh front (đã upload, lưu DB)")
+    # FIX: thêm model_name để nhất quán với upload endpoint
+    model_name: Optional[str] = Field(None, description="Tên model (tùy chọn)")
     remove_background: bool = Field(True)
     num_inference_steps: int = Field(50, ge=20, le=100, description="Số bước diffusion")
     octree_resolution:   int = Field(380, ge=200, le=512, description="Độ phân giải mesh")
@@ -68,6 +70,7 @@ class ShapeRequest(BaseModel):
                     "right": "iVBORw0KGgoAAAA..."
                 },
                 "input_image_url": "https://example.com/uploads/front.png",
+                "model_name": "My Model",
                 "remove_background": True,
                 "num_inference_steps": 50,
                 "octree_resolution": 380,
@@ -123,13 +126,15 @@ class JobStatusResponse(BaseModel):
     updated_at: Optional[str] = None
 
 
+# FIX: thêm current_resources để khớp với get_worker_status() trả về
 class WorkerStatusResponse(BaseModel):
     shape_pipeline_loaded:   bool
     texture_pipeline_loaded: bool
-    device:      str
-    active_jobs: int
-    mv_available: bool
-    model_path:  str
+    device:                  str
+    active_jobs:             int
+    mv_available:            bool
+    model_path:              str
+    current_resources:       Dict[str, Any] = {}
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -174,6 +179,8 @@ async def generate_shape_mv(
             octree_resolution=request.octree_resolution,
             polycount=request.polycount,
             guidance_scale=request.guidance_scale,
+            # FIX: truyền model_name (trước đây bị bỏ sót ở JSON endpoint)
+            model_name=request.model_name,
             user_id=user_id,
         )
         return StageResponse(**result)
@@ -279,6 +286,9 @@ async def generate_texture_mv(
             user_id=user_id,
         )
         return StageResponse(**result)
+    # FIX: ValueError (Stage 1 chưa completed) → 400, không phải 500
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -320,6 +330,9 @@ async def generate_texture_mv_upload(
             user_id=user_id,
         )
         return StageResponse(**result)
+    # FIX: ValueError (Stage 1 chưa completed) → 400, không phải 500
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -457,7 +470,7 @@ async def unload_shape_pipeline():
 # ────────────────────────────────────────────────────────────────────────────
 
 @router.get("/job-progress-sse/{job_id}")
-async def job_progress_sse(job_id: str):
+async def job_progress_sse(job_id: str, db: Session = Depends(get_db)):
     """
     SSE stream progress cho 1 job cụ thể.
 
@@ -468,7 +481,39 @@ async def job_progress_sse(job_id: str):
 
     Stream tự đóng sau khi nhận event `completed` hoặc `failed`.
     """
-    # Lấy queue hiện có, nếu chưa có (client connect sớm) thì tạo mới
+    # FIX: Nếu job đã xong trước khi client connect SSE → trả ngay 1 event rồi đóng.
+    # Tránh trường hợp tạo queue rỗng → client treo mãi không có event nào.
+    try:
+        status_data = await hunyuan3d_mv_service.get_job_status(db, job_id)
+    except Exception:
+        status_data = {}
+
+    terminal_status = status_data.get("status") in ("completed", "failed", "not_found")
+
+    if terminal_status:
+        event_name = status_data.get("status", "failed")
+        # "not_found" không phải SSE event chuẩn → map thành "failed"
+        if event_name == "not_found":
+            event_name = "failed"
+            status_data.setdefault("error", "Job không tồn tại")
+
+        async def one_shot_generator():
+            payload = (
+                f"event: {event_name}\n"
+                f"data: {json.dumps(status_data, ensure_ascii=False)}\n\n"
+            )
+            yield payload.encode("utf-8")
+
+        return StreamingResponse(
+            one_shot_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control":     "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    # Job đang chạy → lấy queue hiện có, hoặc tạo mới nếu client connect trước service
     queue = hunyuan3d_mv_service.get_queue(job_id)
     if queue is None:
         queue = hunyuan3d_mv_service.create_queue(job_id)
@@ -477,9 +522,8 @@ async def job_progress_sse(job_id: str):
         try:
             while True:
                 try:
-                    # ── Heartbeat mỗi 20s để giữ kết nối qua Cloudflare/nginx ──
-                    # Cloudflare trycloudflare.com có idle timeout ~100s
-                    # → gửi heartbeat mỗi 20s để tránh bị cắt giữa chừng
+                    # Heartbeat mỗi 20s để giữ kết nối qua Cloudflare/nginx
+                    # (Cloudflare trycloudflare.com idle timeout ~100s)
                     item = await asyncio.wait_for(queue.get(), timeout=20.0)
                 except asyncio.TimeoutError:
                     # Không có event mới → gửi comment heartbeat (chuẩn SSE)
@@ -494,7 +538,7 @@ async def job_progress_sse(job_id: str):
                 )
                 yield payload.encode("utf-8")
 
-                # ── Đóng stream sau completed/failed ──────────────────────────
+                # Đóng stream sau completed/failed
                 # Frontend nhận tín hiệu rõ ràng → trigger Stage 2 hoặc hiện lỗi
                 if event in ("completed", "failed"):
                     break
@@ -510,7 +554,7 @@ async def job_progress_sse(job_id: str):
         event_generator(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control":    "no-cache",
+            "Cache-Control":     "no-cache",
             "X-Accel-Buffering": "no",   # tắt buffer nginx → event đến ngay lập tức
         },
     )
