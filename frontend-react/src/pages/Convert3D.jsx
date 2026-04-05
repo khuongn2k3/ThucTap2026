@@ -754,7 +754,7 @@ export default function Convert3D() {
               background: "#3f1515", border: "1px solid #6b2020",
               fontSize: 11, color: "#f87171",
             }}>
-              ❌ {error}
+              ❌ Đã xảy ra lỗi, vui lòng thử lại sau.
             </div>
           )}
 

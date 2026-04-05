@@ -393,8 +393,8 @@ class Hunyuan3DMvService:
 
     def _load_tex(self):
         self.tex_pipeline = Hunyuan3DPaintPipeline.from_pretrained(
-            str(MV_DIR / 'hunyuan3d-paint-v2-0-turbo'),
-            device=settings.HUNYUAN3D_DEVICE  
+            str(MV_DIR),
+             
         )
 
     # ────────────────────────────────────────────────────────────────────────
