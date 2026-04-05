@@ -17,7 +17,15 @@ GOOGLE_CLIENT_ID="YOUR_GOOGLE_CLIENT_ID_HERE"
 GOOGLE_CLIENT_SECRET="YOUR_GOOGLE_CLIENT_SECRET_HERE"
 
 # ── HuggingFace token (lay tai huggingface.co/settings/tokens) ──
-HF_TOKEN="YOUR_HUGGINGFACE_TOKEN_HERE"
+if [ -z "$HF_TOKEN" ] || [ "$HF_TOKEN" = "YOUR_HUGGINGFACE_TOKEN_HERE" ]; then
+    echo -e "${CYAN}🔑 Nhap HuggingFace Token (huggingface.co/settings/tokens):${NC}"
+    read -rsp "   HF_TOKEN: " HF_TOKEN
+    echo ""
+    if [ -z "$HF_TOKEN" ]; then
+        echo -e "${RED}❌ HF_TOKEN khong duoc de trong!${NC}"
+        exit 1
+    fi
+fi
 
 clear
 echo -e "${CYAN}"
