@@ -264,9 +264,20 @@ export default function Convert3D() {
     const rawExt = url.split("?")[0].split(".").pop().toLowerCase()
     const ext = url.startsWith("blob:") ? (uploadedExt || rawExt) : rawExt
     fetch(url)
-      .then(r => r.arrayBuffer())
-      .then(buf => {
-        if (ext === "glb") {
+      .then(r => {
+        const ct = r.headers.get("content-type") || ""
+        return r.arrayBuffer().then(buf => ({ buf, ct }))
+      })
+      .then(({ buf, ct }) => {
+        // Xác định format thực tế: ưu tiên magic bytes GLB (0x46546C67 = "glTF"),
+        // sau đó Content-Type, cuối cùng mới dùng extension URL.
+        // Cần thiết vì backend trả URL không có đuôi (.glb): /download/{id}/white|textured
+        const isGlbMagic = buf.byteLength >= 4 && new DataView(buf).getUint32(0, true) === 0x46546C67
+        const isGlbCT = ct.includes("gltf-binary")
+        const resolvedExt = isGlbMagic || isGlbCT ? "glb"
+          : (ct.includes("wavefront") ? "obj" : ext)
+
+        if (resolvedExt === "glb") {
           const view = new DataView(buf)
           if (view.getUint32(0, true) !== 0x46546C67) return
           const jsonLen = view.getUint32(12, true)
@@ -308,7 +319,7 @@ export default function Convert3D() {
               img.src = blobUrl
             }
           }
-        } else if (ext === "obj") {
+        } else if (resolvedExt === "obj") {
           const text = new TextDecoder().decode(buf)
           let vCount = 0, fTris = 0
           for (const line of text.split("\n")) {
@@ -318,7 +329,7 @@ export default function Convert3D() {
           }
           if (vCount > 0) setMeshVertices(vCount)
           if (fTris > 0) setMeshFaces(fTris)
-        } else if (ext === "stl") {
+        } else if (resolvedExt === "stl") {
           const isAscii = new TextDecoder("utf-8",{fatal:false}).decode(buf.slice(0,80)).trimStart().toLowerCase().startsWith("solid") && buf.byteLength < 500_000
           if (isAscii) {
             const fc = (new TextDecoder().decode(buf).match(/^\s*facet\s+normal/gm)||[]).length
