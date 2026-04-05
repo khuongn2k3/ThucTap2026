@@ -16,8 +16,8 @@ NC='\033[0m'
 GOOGLE_CLIENT_ID="YOUR_GOOGLE_CLIENT_ID_HERE"
 GOOGLE_CLIENT_SECRET="YOUR_GOOGLE_CLIENT_SECRET_HERE"
 
-# ── Google Drive file ID chua toan bo project ──
-DRIVE_FILE_ID="1ojEQpe01jTO3ffSW4BvuYALLnzcOA_s8"
+# ── HuggingFace token (lay tai huggingface.co/settings/tokens) ──
+HF_TOKEN="YOUR_HUGGINGFACE_TOKEN_HERE"
 
 clear
 echo -e "${CYAN}"
@@ -37,13 +37,13 @@ echo "  ✓ Check system requirements"
 echo "  ✓ Install MySQL server"
 echo "  ✓ Setup Python 3.10 environment"
 echo "  ✓ Install all dependencies"
-echo "  ✓ Download project tu Google Drive"
+echo "  ✓ Download project tu HuggingFace"
 echo "  ✓ Compile CUDA modules (hunyuan3d-2mv)"
 echo "  ✓ Create database & tables"
 echo "  ✓ Generate full .env file"
 echo ""
 echo -e "${YELLOW}⏱️  Thoi gian uoc tinh: 30-50 phut${NC}"
-echo -e "${YELLOW}💾 Download: tu Google Drive cua ban${NC}"
+echo -e "${YELLOW}💾 Download: tu HuggingFace (khuongn2k3/khuong_mv)${NC}"
 echo ""
 
 read -p "Nhan ENTER de bat dau hoac Ctrl+C de huy..."
@@ -240,16 +240,13 @@ echo -e "${MAGENTA}[3/10] CREATING VIRTUAL ENVIRONMENT (Python 3.10)${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 if [ -d "venv" ]; then
-    echo -e "${YELLOW}⚠️  venv/ da ton tai, dang xoa va tao lai...${NC}"
-    deactivate 2>/dev/null || true
-    rm -rf venv
+    echo -e "${GREEN}✅ venv/ da ton tai, dung lai (bo qua tao moi)${NC}"
+    source venv/bin/activate
+else
+    echo -e "${CYAN}   Tao venv voi --system-site-packages (ke thua torch tu system)${NC}"
+    python3.10 -m venv venv --system-site-packages
+    source venv/bin/activate
 fi
-
-# Luon tao venv voi --system-site-packages de ke thua torch tu image
-echo -e "${CYAN}   Tao venv voi --system-site-packages (ke thua torch tu system)${NC}"
-python3.10 -m venv venv --system-site-packages
-
-source venv/bin/activate
 
 echo -e "${GREEN}✅ Virtual environment: $(python --version)${NC}"
 
@@ -307,17 +304,21 @@ echo -e "\n${MAGENTA}═══════════════════�
 echo -e "${MAGENTA}[5/10] INSTALLING PYTHON DEPENDENCIES${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
-echo -e "${YELLOW}Cai packages, mat 15-30 phut...${NC}\n"
+if python -c "import fastapi, uvicorn, sqlalchemy" 2>/dev/null; then
+    echo -e "${GREEN}✅ Dependencies da cai san, bo qua Step 5${NC}"
+else
+    echo -e "${YELLOW}Cai packages, mat 15-30 phut...${NC}\n"
 
-# Cai basicsr truoc voi --no-build-isolation de tranh pip tu tai torch (~530MB) trong khi da co san
-echo -e "${CYAN}Pre-installing basicsr (skip isolated build to reuse existing torch)...${NC}"
-pip install basicsr==1.4.2 --no-build-isolation \
-    && echo -e "${GREEN}✅ basicsr installed${NC}" \
-    || echo -e "${YELLOW}⚠️  basicsr install failed, se thu lai cung requirements...${NC}"
+    # Cai basicsr truoc voi --no-build-isolation de tranh pip tu tai torch (~530MB) trong khi da co san
+    echo -e "${CYAN}Pre-installing basicsr (skip isolated build to reuse existing torch)...${NC}"
+    pip install basicsr==1.4.2 --no-build-isolation \
+        && echo -e "${GREEN}✅ basicsr installed${NC}" \
+        || echo -e "${YELLOW}⚠️  basicsr install failed, se thu lai cung requirements...${NC}"
 
-pip install -r requirements-gpu.txt --no-build-isolation
-pip install gdown  # can de download Google Drive
-echo -e "\n${GREEN}✅ Dependencies installed${NC}"
+    pip install -r requirements-gpu.txt --no-build-isolation
+    echo -e "\n${GREEN}✅ Dependencies installed${NC}"
+fi
+pip install -q huggingface_hub  # can de download HuggingFace
 
 # Verify PyTorch + CUDA
 python -c "
@@ -332,10 +333,10 @@ else:
 "
 
 # ==========================================
-# STEP 6: Download project tu Google Drive
+# STEP 6: Download project tu HuggingFace
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[6/10] DOWNLOADING & EXTRACTING FROM GOOGLE DRIVE${NC}"
+echo -e "${MAGENTA}[6/10] DOWNLOADING & EXTRACTING FROM HUGGINGFACE${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 MV_DIR="./hunyuan3d-2mv"
@@ -343,70 +344,42 @@ MV_DIR="./hunyuan3d-2mv"
 if [ -d "$MV_DIR" ] && [ -d "$MV_DIR/hy3dgen" ] && [ -d "$MV_DIR/hunyuan3d-dit-v2-mv-fast" ]; then
     echo -e "${GREEN}✅ hunyuan3d-2mv/ da ton tai va day du, bo qua download${NC}"
 else
-    # Cai pv de co progress bar khi stream
+    # Cai pv de co progress bar
     apt install -y pv > /dev/null 2>&1 && PV_OK=1 || PV_OK=0
 
-    echo -e "${YELLOW}📥 Dang tai + giai nen song song (stream)...${NC}"
+    HF_REPO="khuongn2k3/khuong_mv"
+    HF_FILENAME="hunyuan3d-2mv.tar.gz"
+    HF_ARCHIVE="./hunyuan3d-2mv.tar.gz"
+
+    echo -e "${YELLOW}📥 Dang tai tu HuggingFace...${NC}"
     echo -e "${CYAN}   File ~9GB — uoc tinh 3-10 phut tuy bang thong${NC}\n"
 
-    STREAM_OK=0
+    huggingface-cli download "$HF_REPO" "$HF_FILENAME" \
+        --repo-type model \
+        --local-dir . \
+        --token "$HF_TOKEN" \
+        && echo -e "${GREEN}✅ Download thanh cong${NC}" \
+        || { echo -e "${RED}❌ Download that bai!${NC}"; exit 1; }
 
-    # ── Thu stream: tai + giai nen cung luc, khong luu .tar.gz ──
+    # Kiem tra file
+    ARCHIVE_SIZE=$(du -m "$HF_ARCHIVE" 2>/dev/null | cut -f1)
+    echo -e "${CYAN}   File size: ${ARCHIVE_SIZE} MB${NC}"
+    if [ "${ARCHIVE_SIZE:-0}" -lt 10 ]; then
+        echo -e "${RED}❌ File download qua nho (${ARCHIVE_SIZE} MB)${NC}"
+        rm -f "$HF_ARCHIVE"
+        exit 1
+    fi
+
+    # Giai nen voi progress
+    echo -e "${YELLOW}📦 Dang giai nen...${NC}"
     if [ "$PV_OK" -eq 1 ]; then
-        echo -e "${CYAN}   [Mode] Stream voi progress bar (pv)${NC}"
-        python -m gdown "https://drive.google.com/uc?id=${DRIVE_FILE_ID}" \
-            --fuzzy -O - 2>/dev/null \
-            | pv -s 9G -name "  Downloading" \
-            | tar -xz -C . \
-            && STREAM_OK=1
+        pv "$HF_ARCHIVE" | tar -xz -C .
     else
-        echo -e "${CYAN}   [Mode] Stream khong co pv${NC}"
-        python -m gdown "https://drive.google.com/uc?id=${DRIVE_FILE_ID}" \
-            --fuzzy -O - 2>/dev/null \
-            | tar -xz -C . \
-            && STREAM_OK=1
+        tar -xzvf "$HF_ARCHIVE" -C .
     fi
 
-    # ── Fallback: tai file roi giai nen ──
-    if [ "$STREAM_OK" -eq 0 ]; then
-        echo -e "${YELLOW}⚠️  Stream that bai, fallback: tai file roi giai nen...${NC}"
-        DRIVE_ARCHIVE="./drive_download.tar.gz"
-
-        # Thu gdown
-        if ! python -m gdown "https://drive.google.com/uc?id=${DRIVE_FILE_ID}" \
-                --fuzzy -O "$DRIVE_ARCHIVE"; then
-            # Fallback curl
-            echo -e "${YELLOW}gdown that bai, thu curl...${NC}"
-            curl -c /tmp/gdrive_cookie.txt -s -L \
-                "https://drive.google.com/uc?export=download&id=${DRIVE_FILE_ID}" \
-                | grep -o 'confirm=[^&"]*' | head -1 > /tmp/gdrive_confirm.txt
-            CONFIRM=$(cat /tmp/gdrive_confirm.txt)
-            curl -L -b /tmp/gdrive_cookie.txt \
-                "https://drive.google.com/uc?export=download&confirm=${CONFIRM}&id=${DRIVE_FILE_ID}" \
-                -o "$DRIVE_ARCHIVE"
-        fi
-
-        # Kiem tra file
-        ARCHIVE_SIZE=$(du -m "$DRIVE_ARCHIVE" 2>/dev/null | cut -f1)
-        echo -e "${CYAN}   File size: ${ARCHIVE_SIZE} MB${NC}"
-        if [ "${ARCHIVE_SIZE:-0}" -lt 10 ]; then
-            echo -e "${RED}❌ File download qua nho (${ARCHIVE_SIZE} MB) — bi block boi Google Drive${NC}"
-            echo -e "${YELLOW}   Giai phap: share file Drive dang 'Anyone with link' roi chay lai${NC}"
-            rm -f "$DRIVE_ARCHIVE"
-            exit 1
-        fi
-
-        # Giai nen voi progress
-        echo -e "${YELLOW}📦 Dang giai nen...${NC}"
-        if [ "$PV_OK" -eq 1 ]; then
-            pv "$DRIVE_ARCHIVE" | tar -xz -C .
-        else
-            tar -xzvf "$DRIVE_ARCHIVE" -C .
-        fi
-
-        rm -f "$DRIVE_ARCHIVE"
-        echo -e "${GREEN}✅ Giai nen xong, da xoa file .tar.gz${NC}"
-    fi
+    rm -f "$HF_ARCHIVE"
+    echo -e "${GREEN}✅ Giai nen xong, da xoa file .tar.gz${NC}"
 
     # ── Xac nhan cau truc sau giai nen ──
     if [ ! -d "$MV_DIR" ]; then
