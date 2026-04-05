@@ -394,7 +394,8 @@ class Hunyuan3DMvService:
     def _load_tex(self):
         self.tex_pipeline = Hunyuan3DPaintPipeline.from_pretrained(
             str(MV_DIR),
-             
+            subfolder='hunyuan3d-paint-v2-0-turbo',
+            device=settings.HUNYUAN3D_DEVICE,
         )
 
     # ────────────────────────────────────────────────────────────────────────
@@ -679,6 +680,14 @@ class Hunyuan3DMvService:
         texture_4k: bool = False,
         user_id: Optional[int] = None,
     ) -> Dict[str, Any]:
+        shape_job = db.query(ModelJob).filter(ModelJob.job_id == shape_job_id).first()
+        if not shape_job or shape_job.status != 'completed':
+            current_status = shape_job.status if shape_job else 'not_found'
+            raise ValueError(
+                f"Stage 1 chưa hoàn tất (status={current_status}). "
+                "Hãy đợi Stage 1 completed trước khi chạy Stage 2."
+            )
+
         white_mesh_path = Path(settings.DOWNLOAD_DIR) / f"{shape_job_id}.white.glb"
         if not white_mesh_path.exists():
             raise FileNotFoundError(
@@ -686,13 +695,14 @@ class Hunyuan3DMvService:
                 "Hãy chạy Stage 1 trước và đợi status=completed."
             )
 
-        shape_job = db.query(ModelJob).filter(ModelJob.job_id == shape_job_id).first()
-        input_image_url = shape_job.input_image_url if shape_job else ""
+        input_image_url = shape_job.input_image_url
+        model_name = shape_job.model_name
 
         tex_job_id = str(uuid.uuid4())
         tex_job = ModelJob(
             user_id=user_id, job_id=tex_job_id,
-            status='pending', input_image_url=input_image_url, has_texture=False,
+            status='pending', input_image_url=input_image_url,
+            has_texture=False, model_name=model_name,
         )
         db.add(tex_job); db.commit(); db.refresh(tex_job)
         print(f"✅ [Stage 2] Texture job created: {tex_job_id} (shape: {shape_job_id})")
