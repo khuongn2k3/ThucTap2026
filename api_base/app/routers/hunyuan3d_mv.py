@@ -46,15 +46,15 @@ class ShapeRequest(BaseModel):
     # FIX: thêm model_name để nhất quán với upload endpoint
     model_name: Optional[str] = Field(None, description="Tên model (tùy chọn)")
     remove_background: bool = Field(True)
-    num_inference_steps: int = Field(50, ge=20, le=100, description="Số bước diffusion")
-    octree_resolution:   int = Field(380, ge=200, le=512, description="Độ phân giải mesh")
+    num_inference_steps: int = Field(100, ge=20, le=100, description="Số bước diffusion")
+    octree_resolution:   int = Field(512, ge=200, le=512, description="Độ phân giải mesh")
     polycount: Optional[int] = Field(
         None,
         description="Số faces mục tiêu (decimate). None hoặc <=0 thì bỏ qua decimation.",
         ge=1000,
     )
     guidance_scale: float = Field(
-        5.0,
+        7.0,
         description="Guidance scale cho diffusion (tuning chất lượng/chi tiết).",
         ge=0.1,
         le=20.0,
@@ -94,13 +94,22 @@ class TextureRequest(BaseModel):
         False,
         description="Nếu True thì upscale texture lên 4K bằng RealESRGAN (nếu có weights)."
     )
+    images_base64: Optional[Dict[str, str]] = Field(
+        None,
+        description='Ảnh các góc phụ (left/right/back) để paint multi-view. Tùy chọn.'
+    )
 
     class Config:
         json_schema_extra = {
             "example": {
                 "shape_job_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
                 "front_image_base64": "iVBORw0KGgoAAAA...",
-                "texture_4k": False
+                "texture_4k": False,
+                "images_base64": {
+                    "left": "iVBORw0KGgoAAAA...",
+                    "right": "iVBORw0KGgoAAAA...",
+                    "back": "iVBORw0KGgoAAAA..."
+                }
             }
         }
 
@@ -284,6 +293,7 @@ async def generate_texture_mv(
             front_image_base64=request.front_image_base64,
             texture_4k=request.texture_4k,
             user_id=user_id,
+            images_base64=request.images_base64,
         )
         return StageResponse(**result)
     # FIX: ValueError (Stage 1 chưa completed) → 400, không phải 500
@@ -373,6 +383,7 @@ async def download_white_mesh(job_id: str):
         media_type="model/gltf-binary",
         filename=f"{job_id}.white.glb",
         headers={
+            "Cache-Control": "public, max-age=31536000, immutable",
             "X-Job-Id": job_id,
             "X-Mesh-Stage": "shape-only",
             "X-Has-Texture": "false",
@@ -407,6 +418,7 @@ async def download_textured_mesh(job_id: str):
         media_type="model/gltf-binary",
         filename=f"{job_id}.glb",
         headers={
+            "Cache-Control": "public, max-age=31536000, immutable",
             "X-Job-Id": job_id,
             "X-Mesh-Stage": "textured",
             "X-Has-Texture": "true",

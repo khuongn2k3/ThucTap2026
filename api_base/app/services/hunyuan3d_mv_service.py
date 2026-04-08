@@ -143,6 +143,7 @@ class Hunyuan3DMvService:
             self.tex_pipeline:   Optional[object] = None
             self.rembg:          Optional[object] = None
             self.task_cache: Dict[str, Dict[str, Any]] = {}
+            self._tex_thread_active: bool = False  # Bug2 fix: theo dõi thread texture đang chạy
 
             # Queue xếp hàng job — thay thế lock cứng
             # Mỗi item trong queue là dict mô tả 1 job cần chạy
@@ -350,12 +351,18 @@ class Hunyuan3DMvService:
 
     def _unload_texture(self):
         """Xóa texture pipeline khỏi VRAM."""
+        import torch, gc
+        # Bug2 fix: không xóa pipeline khi thread đang dùng → tránh zombie thread crash
+        if getattr(self, '_tex_thread_active', False):
+            print("⚠️  Texture thread đang chạy, bỏ qua unload để tránh zombie thread")
+            return
         if self.tex_pipeline is not None:
-            import torch
             del self.tex_pipeline
             self.tex_pipeline = None
-            torch.cuda.empty_cache()
             print("🗑️  Texture pipeline unloaded from VRAM")
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
 
 
     # ────────────────────────────────────────────────────────────────────────
@@ -395,8 +402,8 @@ class Hunyuan3DMvService:
         self.tex_pipeline = Hunyuan3DPaintPipeline.from_pretrained(
             str(MV_DIR),
             subfolder='hunyuan3d-paint-v2-0-turbo',
-            device=settings.HUNYUAN3D_DEVICE,
         )
+	
 
     # ────────────────────────────────────────────────────────────────────────
     # STAGE 1 — Shape generation
@@ -501,9 +508,12 @@ class Hunyuan3DMvService:
             loop = asyncio.get_running_loop()
             t_start = time.time()
             # _do_shape chạy trong thread — dùng _push_event (thread-safe) với loop
-            output_path = await loop.run_in_executor(
-                None, self._do_shape,
-                job_id, pil_images, num_inference_steps, octree_resolution, polycount, guidance_scale, loop
+            output_path = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None, self._do_shape,
+                    job_id, pil_images, num_inference_steps, octree_resolution, polycount, guidance_scale, loop
+                ),
+                timeout=900  # 15 phút — đủ cho octree=512 + steps=100
             )
             duration = time.time() - t_start
 
@@ -679,6 +689,7 @@ class Hunyuan3DMvService:
         front_image_base64: str,
         texture_4k: bool = False,
         user_id: Optional[int] = None,
+        images_base64: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         shape_job = db.query(ModelJob).filter(ModelJob.job_id == shape_job_id).first()
         if not shape_job or shape_job.status != 'completed':
@@ -722,6 +733,7 @@ class Hunyuan3DMvService:
                 "shape_job_id":         shape_job_id,
                 "front_image_base64":   front_image_base64,
                 "texture_4k":           texture_4k,
+                "images_base64":        images_base64,
             },
         })
 
@@ -740,6 +752,7 @@ class Hunyuan3DMvService:
         }
 
     async def _run_texture_bg(self, tex_job_id, shape_job_id, front_image_base64, texture_4k=False,
+                               images_base64: Optional[Dict[str, str]] = None,
                                done_event: asyncio.Event = None):
         from app.models.base_db import SessionLocal
         db = SessionLocal()
@@ -751,16 +764,43 @@ class Hunyuan3DMvService:
                 self._unload_shape()
                 print("🚀 Loading texture pipeline...")
                 loop_load = asyncio.get_running_loop()
-                await loop_load.run_in_executor(None, self._load_tex)
+                await asyncio.wait_for(
+                    loop_load.run_in_executor(None, self._load_tex),
+                    timeout=300  # Bug1 fix: timeout 5 phút cho load model
+                )
                 print("✅ Texture pipeline ready!")
 
             await self._push_event_async(tex_job_id, "progress", {
                 "stage": "texture", "step": "start",
-                "message": "🎨 Stage 2 bắt đầu — đang decode ảnh front...",
+                "message": "🎨 Stage 2 bắt đầu — đang decode và xử lý ảnh...",
                 "eta_seconds": self._get_eta("texture"),
             })
 
+            # Decode front image + rembg nếu còn background
             front_image = Image.open(BytesIO(base64.b64decode(front_image_base64))).convert("RGBA")
+            if self.rembg is not None:
+                try:
+                    front_image = self.rembg(front_image)
+                    print(f"✅ [{tex_job_id}] Front image background removed")
+                except Exception as rb_err:
+                    print(f"⚠️  [{tex_job_id}] rembg failed, dùng ảnh gốc: {rb_err}")
+
+            # Decode các góc phụ nếu có (left/right/back)
+            extra_images: Dict[str, Image.Image] = {}
+            if images_base64:
+                for view, b64 in images_base64.items():
+                    if view == "front":
+                        continue
+                    try:
+                        img = Image.open(BytesIO(base64.b64decode(b64))).convert("RGBA")
+                        if self.rembg is not None:
+                            try:
+                                img = self.rembg(img)
+                            except Exception:
+                                pass
+                        extra_images[view] = img
+                    except Exception as e:
+                        print(f"⚠️  [{tex_job_id}] Decode {view} image failed: {e}")
 
             _reset_vram_peak()
             res_before = _get_resources()
@@ -775,9 +815,16 @@ class Hunyuan3DMvService:
             # [BUG1+3 FIX] lấy running loop trong coroutine → truyền vào thread
             loop = asyncio.get_running_loop()
             t_start = time.time()
-            output_path = await loop.run_in_executor(
-                None, self._do_texture, tex_job_id, shape_job_id, front_image, texture_4k, loop
-            )
+            self._tex_thread_active = True  # Bug2 fix: đánh dấu thread đang chạy
+            try:
+                output_path = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None, self._do_texture, tex_job_id, shape_job_id, front_image, texture_4k, loop, extra_images
+                    ),
+                    timeout=900  # Bug3 fix: tăng lên 15 phút cho 4K + multi-view
+                )
+            finally:
+                self._tex_thread_active = False  # Bug2 fix: thread xong mới cho phép unload
             duration = time.time() - t_start
 
             res_after = _get_resources()
@@ -863,7 +910,7 @@ class Hunyuan3DMvService:
 
             print(f"✅ [Stage 2] {tex_job_id} done | texture={has_texture}")
 
-        except Exception as e:
+        except (Exception, asyncio.TimeoutError) as e:
             import traceback; traceback.print_exc()
             job = db.query(ModelJob).filter(ModelJob.job_id == tex_job_id).first()
             if job:
@@ -882,7 +929,8 @@ class Hunyuan3DMvService:
                 done_event.set()  # Báo cho worker biết job xong → lấy job tiếp theo
 
     def _do_texture(self, tex_job_id, shape_job_id, front_image, texture_4k=False,
-                    loop: asyncio.AbstractEventLoop = None) -> Path:
+                    loop: asyncio.AbstractEventLoop = None,
+                    extra_images: Optional[Dict[str, Image.Image]] = None) -> Path:
         """Chạy trong thread pool. Dùng _push_event (thread-safe)."""
         import trimesh
         white_mesh_path = Path(settings.DOWNLOAD_DIR) / f"{shape_job_id}.white.glb"
@@ -894,7 +942,38 @@ class Hunyuan3DMvService:
         }, loop=loop)
 
         mesh = trimesh.load(str(white_mesh_path))
-        mesh = self.tex_pipeline(mesh, image=front_image)
+
+        # Gom tất cả views: front + các góc phụ nếu có
+        all_images = [front_image]
+        if extra_images:
+            for view in ["left", "right", "back"]:
+                if view in extra_images:
+                    all_images.append(extra_images[view])
+            print(f"✅ [{tex_job_id}] Texture với {len(all_images)} view(s): front + {list(extra_images.keys())}")
+        else:
+            print(f"✅ [{tex_job_id}] Texture với 1 view (front only)")
+
+        # Gọi pipeline với đầy đủ param
+        try:
+            # Thử truyền multi-view nếu pipeline hỗ trợ
+            if len(all_images) > 1:
+                mesh = self.tex_pipeline(
+                    mesh,
+                    image=all_images,
+                    num_inference_steps=50,
+                    guidance_scale=5.0,
+                )
+            else:
+                mesh = self.tex_pipeline(
+                    mesh,
+                    image=front_image,
+                    num_inference_steps=50,
+                    guidance_scale=5.0,
+                )
+        except TypeError:
+            # Fallback: pipeline cũ chỉ nhận image đơn, không nhận extra params
+            print(f"⚠️  [{tex_job_id}] Pipeline không hỗ trợ multi-view hoặc extra params, fallback single image")
+            mesh = self.tex_pipeline(mesh, image=front_image)
 
         save_dir = Path(settings.DOWNLOAD_DIR)
         output_path = save_dir / f"{tex_job_id}.glb"
@@ -950,8 +1029,10 @@ class Hunyuan3DMvService:
                 print(f"⚠️  [{job_id}] RealESRGAN weights không tìm thấy, skip 4K")
                 return glb_path
 
+            import torch as _torch_check
+            use_half = _torch_check.cuda.is_available()
             upsampler = RealESRGANer(scale=4, model_path=str(ckpt_path), model=model,
-                                     tile=512, tile_pad=10, pre_pad=0, half=True)
+                                     tile=512, tile_pad=10, pre_pad=0, half=use_half)
 
             buffer_views = json_data.get('bufferViews', [])
             blob_map: dict = {}
