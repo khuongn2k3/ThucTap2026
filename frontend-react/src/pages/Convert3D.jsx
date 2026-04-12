@@ -15,6 +15,81 @@ const STEPS = {
   ERROR:            "error",
 }
 
+// ── Module-level model cache ──────────────────────────────────────────────────
+// Tồn tại suốt session, không bị reset khi component re-render
+// Map<url, { blobUrl, meshFaces, meshVertices, texResolution }>
+const _modelCache = new Map()
+
+// Prefetch + parse model ngầm, lưu vào cache
+// Gọi khi: SSE completed, hover card → khi user click thì instant
+function prefetchModel(url) {
+  if (!url || url.startsWith("blob:") || _modelCache.has(url)) return
+  // Đánh dấu đang fetch để tránh fetch trùng
+  _modelCache.set(url, null)
+
+  fetch(url)
+    .then(r => {
+      const ct = r.headers.get("content-type") || ""
+      return r.arrayBuffer().then(buf => ({ buf, ct }))
+    })
+    .then(({ buf, ct }) => {
+      // Tạo blob URL
+      const modelBlob = new Blob([buf], { type: "model/gltf-binary" })
+      const blobUrl = URL.createObjectURL(modelBlob)
+
+      // Parse metadata
+      const entry = { blobUrl, meshFaces: null, meshVertices: null, texResolution: null }
+
+      const isGlbMagic = buf.byteLength >= 4 && new DataView(buf).getUint32(0, true) === 0x46546C67
+      const isGlbCT    = ct.includes("gltf-binary")
+      const ext        = isGlbMagic || isGlbCT ? "glb" : (ct.includes("wavefront") ? "obj" : "glb")
+
+      if (ext === "glb" && isGlbMagic) {
+        const jsonLen = new DataView(buf).getUint32(12, true)
+        try {
+          const json = JSON.parse(new TextDecoder().decode(buf.slice(20, 20 + jsonLen)))
+          if (json.meshes && json.accessors) {
+            let tv = 0, tf = 0
+            json.meshes.forEach(mesh => {
+              mesh.primitives?.forEach(prim => {
+                if (prim.attributes?.POSITION !== undefined)
+                  tv += json.accessors[prim.attributes.POSITION]?.count || 0
+                if (prim.indices !== undefined)
+                  tf += Math.floor((json.accessors[prim.indices]?.count || 0) / 3)
+                else if (prim.attributes?.POSITION !== undefined)
+                  tf += Math.floor((json.accessors[prim.attributes.POSITION]?.count || 0) / 3)
+              })
+            })
+            if (tv > 0) entry.meshVertices = tv
+            if (tf > 0) entry.meshFaces = tf
+          }
+          if (json.images?.length > 0 && json.bufferViews) {
+            const binOffset = 12 + 8 + jsonLen + 8
+            const imgRef = json.images[0]
+            if (imgRef.bufferView !== undefined) {
+              const bv = json.bufferViews[imgRef.bufferView]
+              const imgBytes = buf.slice(binOffset + bv.byteOffset, binOffset + bv.byteOffset + bv.byteLength)
+              const imgBlob = new Blob([imgBytes], { type: imgRef.mimeType || "image/png" })
+              const imgBlobUrl = URL.createObjectURL(imgBlob)
+              const img = new Image()
+              img.onload = () => {
+                const maxDim = Math.max(img.width, img.height)
+                entry.texResolution = maxDim <= 512 ? "512" : maxDim <= 1024 ? "1k" : maxDim <= 2048 ? "2k" : "4k"
+                URL.revokeObjectURL(imgBlobUrl)
+                _modelCache.set(url, entry)
+              }
+              img.onerror = () => { URL.revokeObjectURL(imgBlobUrl); _modelCache.set(url, entry) }
+              img.src = imgBlobUrl
+              return  // wait for img.onload to set cache
+            }
+          }
+        } catch {}
+      }
+      _modelCache.set(url, entry)
+    })
+    .catch(() => { _modelCache.delete(url) })
+}
+
 // Export constants
 const FORMATS  = ["GLB", "OBJ", "STL"]
 const TEX_RES  = ["512", "1k", "2k", "4k"]
@@ -201,7 +276,7 @@ export default function Convert3D() {
   const [withTexture, setWithTexture]   = useState(true)
   const [texture4k, setTexture4k]       = useState(false)
   const [quality, setQuality]           = useState("standard")
-  const [polycount, setPolycount]       = useState(null)
+  const [polycount, setPolycount]       = useState(500000)
   const [guidanceScale, setGuidanceScale] = useState(5.0)
   const [step, setStep]             = useState(STEPS.IDLE)
   const [shapeJobId,  setShapeJobId]    = useState(null)
@@ -215,6 +290,8 @@ export default function Convert3D() {
   const [meshFaces,    setMeshFaces]    = useState(null)
   const [meshVertices, setMeshVertices] = useState(null)
   const [uploadedExt,  setUploadedExt]  = useState(null)
+  const [resolvedSrc,  setResolvedSrc]  = useState(null)  // blob URL dùng cho ModelViewer3D
+  const resolvedBlobRef = useRef(null)                     // để revoke khi đổi model
   const [baseView,     setBaseView]     = useState("default")
   const [overlayStyle, setOverlayStyle] = useState(null)
   const renderStyle = overlayStyle ?? baseView
@@ -257,9 +334,37 @@ export default function Convert3D() {
 
   const viewerSrc = texUrl || whiteUrl
 
-  // Parse face/vertex count khi model thay đổi (giống Home.jsx)
+  // Fetch model 1 lần → tạo blob URL cho viewer + parse metadata từ buffer đã có
+  // Tránh double-download: trước đây fetch(url) chạy 2 lần song song
+  // (useEffect này + GLTFLoader bên trong ModelViewer3D)
   useEffect(() => {
-    if (!viewerSrc) { setMeshFaces(null); setMeshVertices(null); setTexResolution(null); return }
+    // Revoke blob URL cũ để tránh memory leak
+    if (resolvedBlobRef.current) {
+      URL.revokeObjectURL(resolvedBlobRef.current)
+      resolvedBlobRef.current = null
+    }
+
+    if (!viewerSrc) {
+      setResolvedSrc(null)
+      setMeshFaces(null); setMeshVertices(null); setTexResolution(null)
+      return
+    }
+
+    // Nếu đã là blob URL (model upload local) → dùng thẳng, không fetch lại
+    if (viewerSrc.startsWith("blob:")) {
+      setResolvedSrc(viewerSrc)
+    }
+
+    // ── Cache hit: instant, không fetch ────────────────────────────────────
+    const cached = _modelCache.get(viewerSrc)
+    if (cached?.blobUrl) {
+      setResolvedSrc(cached.blobUrl)
+      if (cached.meshFaces    !== null) setMeshFaces(cached.meshFaces)
+      if (cached.meshVertices !== null) setMeshVertices(cached.meshVertices)
+      if (cached.texResolution !== null) setTexResolution(cached.texResolution)
+      return
+    }
+
     const url = viewerSrc
     const rawExt = url.split("?")[0].split(".").pop().toLowerCase()
     const ext = url.startsWith("blob:") ? (uploadedExt || rawExt) : rawExt
@@ -269,6 +374,14 @@ export default function Convert3D() {
         return r.arrayBuffer().then(buf => ({ buf, ct }))
       })
       .then(({ buf, ct }) => {
+        // Tạo blob URL từ buffer → ModelViewer3D load local, không fetch lại
+        if (!viewerSrc.startsWith("blob:")) {
+          const modelBlob = new Blob([buf], { type: "model/gltf-binary" })
+          const blobUrl = URL.createObjectURL(modelBlob)
+          resolvedBlobRef.current = blobUrl
+          setResolvedSrc(blobUrl)
+        }
+
         // Xác định format thực tế: ưu tiên magic bytes GLB (0x46546C67 = "glTF"),
         // sau đó Content-Type, cuối cùng mới dùng extension URL.
         // Cần thiết vì backend trả URL không có đuôi (.glb): /download/{id}/white|textured
@@ -341,6 +454,13 @@ export default function Convert3D() {
         }
       })
       .catch(() => {})
+
+    return () => {
+      if (resolvedBlobRef.current) {
+        URL.revokeObjectURL(resolvedBlobRef.current)
+        resolvedBlobRef.current = null
+      }
+    }
   }, [viewerSrc])
   const isRunning = [STEPS.S1_LOADING,STEPS.S1_POLLING,STEPS.S2_LOADING,STEPS.S2_POLLING].includes(step)
 
@@ -457,6 +577,7 @@ export default function Convert3D() {
       setActiveJobId(r.data.job_id)
       setStep(STEPS.S2_POLLING)
       doSSE(r.data.job_id, (url, m, sid) => {
+        prefetchModel(url)  // bắt đầu download ngầm ngay khi completed
         setTexUrl(url); setMetrics(m); setActiveJobId(null); setStep(STEPS.DONE)
         setCurrentJobId(r.data.job_id)
         setSubmissionId(sid ?? null); setCollected(false)
@@ -477,13 +598,14 @@ export default function Convert3D() {
       if (left) fd.append("left", left)
       if (right) fd.append("right", right)
       if (back) fd.append("back", back)
-      if (quality === "ultra") fd.append("octree_resolution", "450")
-      if (polycount) fd.append("polycount", polycount)
+      fd.append("octree_resolution", "450")
+      fd.append("polycount", polycount)
       fd.append("guidance_scale", guidanceScale)
       const r = await generateShapeMv(fd)
       const jid = r.data.job_id
       setShapeJobId(jid); setActiveJobId(jid); setStep(STEPS.S1_POLLING)
       doSSE(jid, (url, m, sid) => {
+        prefetchModel(url)  // bắt đầu download ngầm ngay khi completed
         setWhiteUrl(url); setActiveJobId(null)
         setSubmissionId(sid ?? null); setCollected(false)
         if (withTexture) {
@@ -679,28 +801,20 @@ export default function Convert3D() {
                   <span style={{ fontSize: 11, color: "#aaa" }}>Polycount</span>
                   <Tooltip text="Giảm số faces sau generate. Auto = giữ nguyên output pipeline." />
                 </div>
-                <span style={{ fontSize: 11, color: polycount ? "#60a5fa" : "#555",
+                <span style={{ fontSize: 11, color: "#60a5fa",
                   fontFamily: "monospace", fontWeight: 600 }}>
-                  {polycount ? polycount.toLocaleString() : "Auto"}
+                  {polycount.toLocaleString()}
                 </span>
               </div>
-              <input type="range" min={1000} max={200000} step={1000}
-                value={polycount ?? 200000} disabled={isRunning}
-                onChange={e => { const v = parseInt(e.target.value); setPolycount(v >= 200000 ? null : v) }}
+              <input type="range" min={1000} max={500000} step={1000}
+                value={polycount} disabled={isRunning}
+                onChange={e => setPolycount(parseInt(e.target.value))}
                 style={{ width: "100%", accentColor: "#3b82f6", opacity: isRunning ? 0.4 : 1 }}
               />
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 3 }}>
                 <span style={{ fontSize: 9, color: "#444" }}>1K</span>
-                <span style={{ fontSize: 9, color: "#555" }}>Auto (200K)</span>
+                <span style={{ fontSize: 9, color: "#555" }}>500K</span>
               </div>
-              {polycount && (
-                <button onClick={() => setPolycount(null)} disabled={isRunning}
-                  style={{ marginTop: 5, width: "100%", padding: "4px 0", borderRadius: 6,
-                    border: "1px solid #303038", background: "transparent",
-                    color: "#555", fontSize: 10, cursor: "pointer" }}>
-                  Reset to Auto
-                </button>
-              )}
             </div>
 
             {/* Guidance Scale */}
@@ -864,9 +978,9 @@ export default function Convert3D() {
       {/* ══ CENTER VIEWPORT ═══════════════════════════════════════════════ */}
       <main style={{ flex: 1, position: "relative", overflow: "hidden", background: "radial-gradient(ellipse at 50% 40%, #606060 0%, #505050 15%, #404040 28%, #303030 42%, #222222 57%, #171717 72%, #101010 86%, #0c0c0c 100%)" }}>
 
-        {viewerSrc ? (
+        {resolvedSrc ? (
           <ModelViewer3D
-            src={viewerSrc}
+            src={resolvedSrc}
             style={renderStyle}
             autoRotate={autoRot}
             wireframe={wire}
@@ -1548,7 +1662,7 @@ function RightPanel({ viewerSrc, onSelectModel, collectedModels, setCollectedMod
                         cursor: "pointer", position: "relative",
                         outline: viewerSrc && job.output_model_url === viewerSrc ? "1.5px solid #3b82f6" : "none",
                       }}
-                        onMouseEnter={e => e.currentTarget.style.borderColor="#303040"}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor="#303040"; prefetchModel(job.output_model_url) }}
                         onMouseLeave={e => e.currentTarget.style.borderColor="#1e1e24"}
                       >
                         <div style={{ aspectRatio: "1", position: "relative", overflow: "hidden" }}>
@@ -1599,7 +1713,7 @@ function RightPanel({ viewerSrc, onSelectModel, collectedModels, setCollectedMod
                         cursor: model.model_url ? "pointer" : "default", position: "relative",
                         outline: viewerSrc && model.model_url === viewerSrc ? "1.5px solid #f5c842" : "none",
                       }}
-                      onMouseEnter={e => e.currentTarget.style.borderColor="#303040"}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor="#303040"; prefetchModel(model.model_url) }}
                       onMouseLeave={e => e.currentTarget.style.borderColor="#1e1e24"}
                     >
                       <div style={{ aspectRatio: "1", position: "relative", overflow: "hidden" }}>
