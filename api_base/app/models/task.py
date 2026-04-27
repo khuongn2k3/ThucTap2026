@@ -23,6 +23,12 @@ class ModelJob(Base):
     )
     model_name = Column(String(255), nullable=True)
     input_image_url = Column(String(500), nullable=False)
+
+    front_image_url = Column(String(500), nullable=True)
+    left_image_url  = Column(String(500), nullable=True)
+    right_image_url = Column(String(500), nullable=True)
+    back_image_url  = Column(String(500), nullable=True)
+
     output_model_url = Column(String(500), nullable=True)
     submission_id = Column(Integer, ForeignKey("gallery_submissions.id", ondelete="SET NULL"), nullable=True, index=True)
     faces = Column(Integer, nullable=True)

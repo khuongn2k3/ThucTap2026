@@ -399,10 +399,23 @@ class Hunyuan3DMvService:
         self.rembg = BackgroundRemover()
 
     def _load_tex(self):
+        try:
+            from hy3dgen.texgen import pipelines as tex_pipelines
+            tex_pipelines.List = list
+        except Exception:
+            pass
+
         self.tex_pipeline = Hunyuan3DPaintPipeline.from_pretrained(
             str(MV_DIR),
             subfolder='hunyuan3d-paint-v2-0-turbo',
         )
+
+        # Đảm bảo rembg luôn có khi texture pipeline được load.
+        # Fix: nếu Stage 2 chạy sau server restart (không qua Stage 1 trong session này)
+        # thì self.rembg = None → bỏ qua remove background → texture sai.
+        if self.rembg is None:
+            self.rembg = BackgroundRemover()
+            print("✅ BackgroundRemover loaded alongside texture pipeline")
 	
 
     # ────────────────────────────────────────────────────────────────────────
@@ -421,6 +434,11 @@ class Hunyuan3DMvService:
         guidance_scale: float = 5.0,
         user_id: Optional[int] = None,
         model_name: Optional[str] = None,
+
+        front_image_url: Optional[str] = None,
+        left_image_url: Optional[str] = None,
+        right_image_url: Optional[str] = None,
+        back_image_url: Optional[str] = None,
     ) -> Dict[str, Any]:
         if "front" not in images_base64:
             raise ValueError("Thiếu ảnh 'front'")
@@ -430,6 +448,11 @@ class Hunyuan3DMvService:
             user_id=user_id, job_id=job_id,
             status='pending', input_image_url=input_image_url,
             model_name=model_name, has_texture=False,
+
+            front_image_url=front_image_url,
+            left_image_url=left_image_url,
+            right_image_url=right_image_url,
+            back_image_url=back_image_url,
         )
         db.add(job); db.commit(); db.refresh(job)
         print(f"✅ [Stage 1] Shape job created: {job_id}")
@@ -525,6 +548,21 @@ class Hunyuan3DMvService:
             output_url = f"{settings.EXTERNAL_URL}/api/v1/download/{job_id}/white"
 
             job = db.query(ModelJob).filter(ModelJob.job_id == job_id).first()
+
+            from app.utils.thumbnail_renderer import render_thumbnail
+
+            thumb_bytes = render_thumbnail(str(output_path))
+            if thumb_bytes:
+                thumb_dir = Path(settings.UPLOAD_DIR) / "thumbnails"
+                thumb_dir.mkdir(parents=True, exist_ok=True)
+                thumb_path = thumb_dir / f"{job_id}.webp"
+                thumb_path.write_bytes(thumb_bytes)
+                thumb_url = f"{settings.EXTERNAL_URL}/uploads/thumbnails/{job_id}.webp"
+
+                if job:
+                    job.input_image_url = thumb_url
+                    db.commit()
+
             if job:
                 job.status = 'completed'
                 job.output_model_url = output_url
@@ -691,8 +729,12 @@ class Hunyuan3DMvService:
         user_id: Optional[int] = None,
         images_base64: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
-        shape_job = db.query(ModelJob).filter(ModelJob.job_id == shape_job_id).first()
+        shape_job = db.query(ModelJob).filter(
+            ModelJob.job_id == shape_job_id,
+            ModelJob.user_id == user_id,
+        ).first()
         if not shape_job or shape_job.status != 'completed':
+            # Không phân biệt "không tồn tại" vs "không phải của bạn" → tránh lộ thông tin
             current_status = shape_job.status if shape_job else 'not_found'
             raise ValueError(
                 f"Stage 1 chưa hoàn tất (status={current_status}). "
@@ -842,9 +884,24 @@ class Hunyuan3DMvService:
                 print(f"⚠️  GLB fix warning: {fe}")
 
             output_url = f"{settings.EXTERNAL_URL}/api/v1/download/{tex_job_id}/textured"
+
             has_texture, has_skeleton, faces, vertices = self._parse_glb_flags(output_path)
 
             job = db.query(ModelJob).filter(ModelJob.job_id == tex_job_id).first()
+
+            from app.utils.thumbnail_renderer import render_thumbnail
+            thumb_bytes = render_thumbnail(str(output_path))
+            if thumb_bytes:
+                thumb_dir = Path(settings.UPLOAD_DIR) / "thumbnails"
+                thumb_dir.mkdir(parents=True, exist_ok=True)
+                thumb_path = thumb_dir / f"{tex_job_id}.webp"
+                thumb_path.write_bytes(thumb_bytes)
+                thumb_url = f"{settings.EXTERNAL_URL}/uploads/thumbnails/{tex_job_id}.webp"
+
+                if job:
+                    job.input_image_url = thumb_url
+                    db.commit()
+
             if job:
                 job.status = 'completed'
                 job.output_model_url = output_url
@@ -946,7 +1003,7 @@ class Hunyuan3DMvService:
         # Gom tất cả views: front + các góc phụ nếu có
         all_images = [front_image]
         if extra_images:
-            for view in ["left", "right", "back"]:
+            for view in ["right", "back", "left"]:
                 if view in extra_images:
                     all_images.append(extra_images[view])
             print(f"✅ [{tex_job_id}] Texture với {len(all_images)} view(s): front + {list(extra_images.keys())}")
@@ -960,15 +1017,11 @@ class Hunyuan3DMvService:
                 mesh = self.tex_pipeline(
                     mesh,
                     image=all_images,
-                    num_inference_steps=50,
-                    guidance_scale=5.0,
                 )
             else:
                 mesh = self.tex_pipeline(
                     mesh,
                     image=front_image,
-                    num_inference_steps=50,
-                    guidance_scale=5.0,
                 )
         except TypeError:
             # Fallback: pipeline cũ chỉ nhận image đơn, không nhận extra params
@@ -1054,7 +1107,11 @@ class Hunyuan3DMvService:
                 upscaled_np, _ = upsampler.enhance(np.array(pil_img), outscale=4)
                 upscaled_pil = PILImage.fromarray(upscaled_np)
                 if max(upscaled_pil.size) > 4096:
-                    upscaled_pil = upscaled_pil.resize((4096, 4096), PILImage.LANCZOS)
+                    uw, uh = upscaled_pil.size
+                    scale  = 4096 / max(uw, uh)
+                    upscaled_pil = upscaled_pil.resize(
+                        (int(uw * scale), int(uh * scale)), PILImage.LANCZOS
+                    )
                 buf = io.BytesIO()
                 upscaled_pil.save(buf, format='PNG', optimize=True)
                 blob_map[bv_idx] = buf.getvalue()
@@ -1196,13 +1253,52 @@ class Hunyuan3DMvService:
         job = query.first()
         if not job:
             return {"status": "error", "error": "Job not found or unauthorized"}
-        for filename in [f"{job_id}.white.glb", f"{job_id}.glb"]:
+
+        # ── Delete model files ──────────────────────────────────────────
+        for filename in [f"{job_id}.white.glb", f"{job_id}.glb", f"{job_id}_4k.glb"]:
             file_path = Path(settings.DOWNLOAD_DIR) / filename
             if file_path.exists():
                 try:
                     file_path.unlink()
                 except Exception as e:
                     print(f"Failed to delete {file_path}: {e}")
+
+        # ── Delete thumbnail ────────────────────────────────────────────
+        thumb_path = Path(settings.UPLOAD_DIR) / "thumbnails" / f"{job_id}.webp"
+        if thumb_path.exists():
+            try:
+                thumb_path.unlink()
+            except Exception as e:
+                print(f"Failed to delete {thumb_path}: {e}")
+
+        # ── Delete mv images (front/left/right/back) ─────────────────────
+        mv_dirs = set()
+
+        def _delete_upload_by_url(url: Optional[str]):
+            if not url:
+                return
+            rel = url.split("/uploads/")[-1]
+            path = Path(settings.UPLOAD_DIR) / rel
+            mv_dirs.add(path.parent)
+            if path.exists():
+                try:
+                    path.unlink()
+                except Exception as e:
+                    print(f"Failed to delete {path}: {e}")
+
+        _delete_upload_by_url(job.front_image_url)
+        _delete_upload_by_url(job.left_image_url)
+        _delete_upload_by_url(job.right_image_url)
+        _delete_upload_by_url(job.back_image_url)
+
+        # ── Cleanup empty mv dir ─────────────────────────────────────────
+        for d in mv_dirs:
+            try:
+                if d.exists() and d.is_dir() and not any(d.iterdir()):
+                    d.rmdir()
+            except Exception as e:
+                print(f"Failed to remove dir {d}: {e}")
+
         db.delete(job)
         db.commit()
         if job_id in self.task_cache:

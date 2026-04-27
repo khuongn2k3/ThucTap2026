@@ -12,8 +12,9 @@ from contextlib import asynccontextmanager
 from app.config import settings
 from app.routers import base, auth, payment, gallery
 from app.routers import hunyuan3d_mv
-from app.routers import my_jobs  # <-- thêm
-
+from app.routers import my_jobs  
+from app.routers import api_keys
+from app.routers import admin as admin_router
 from app.services.hunyuan3d_mv_service import hunyuan3d_mv_service
 
 
@@ -121,7 +122,8 @@ app.include_router(gallery.router,   prefix="/api/v1", tags=["Gallery"])
 # My Jobs (mới thêm)
 app.include_router(my_jobs.router,   prefix="/api/v1", tags=["My Jobs"])
 
-
+app.include_router(api_keys.router, prefix="/api/v1/admin", tags=["API Keys"])
+app.include_router(admin_router.router, prefix="/api/v1/admin", tags=["Admin"])
 # =========================================
 # ROOT
 # =========================================

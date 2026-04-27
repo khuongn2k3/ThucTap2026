@@ -17,19 +17,68 @@ import json
 
 from app.config import settings
 from app.models.base_db import get_db
-from app.security.security import get_current_user
+from app.security.security import get_auth_context, AuthContext
 from app.models.user import User
+from app.models.task import ModelJob
 from app.services.hunyuan3d_mv_service import hunyuan3d_mv_service
+
+import uuid
+
+def _save_mv_images(user_id: int, images_b64: Dict[str, str]) -> Dict[str, str]:
+    base_dir = Path(settings.UPLOAD_DIR) / "mv"
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    job_dir = base_dir / str(uuid.uuid4())
+    job_dir.mkdir(parents=True, exist_ok=True)
+
+    urls = {}
+    for view, b64 in images_b64.items():
+        data = base64.b64decode(b64)
+        filename = f"{view}.png"
+        path = job_dir / filename
+        path.write_bytes(data)
+
+        urls[view] = f"{settings.EXTERNAL_URL}/uploads/mv/{job_dir.name}/{filename}"
+
+    return urls
+
+
+def _load_b64(url: Optional[str]) -> Optional[str]:
+    if not url:
+        return None
+    rel = url.split("/uploads/")[-1]
+    path = Path(settings.UPLOAD_DIR) / rel
+    if not path.exists():
+        return None
+    return base64.b64encode(path.read_bytes()).decode()
+
 
 router = APIRouter()
 
 
 # ────────────────────────────────────────────────────────────────────────────
-# Dependency
+# Token deduction
 # ────────────────────────────────────────────────────────────────────────────
 
-async def get_uid(current_user: User = Depends(get_current_user)) -> int:
-    return current_user.id
+TOKENS_PER_SHAPE = 1
+TOKENS_PER_TEXTURE = 1
+
+def _deduct_cost(auth: AuthContext, db: Session, cost: int = 1) -> None:
+    """
+    JWT  → trừ user.tokens (báo 402 nếu không đủ)
+    API Key → quota đã +1 trong _verify_api_key(), không đụng user.tokens
+    """
+    if auth.type == "jwt" and auth.user_id:
+        user = db.query(User).filter(User.id == auth.user_id).first()
+        if user is None:
+            raise HTTPException(status_code=404, detail="User không tồn tại")
+        if (user.tokens or 0) < cost:
+            raise HTTPException(
+                status_code=402,
+                detail=f"Không đủ token. Cần {cost}, hiện có {user.tokens or 0}.",
+            )
+        user.tokens = (user.tokens or 0) - cost
+        db.commit()
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -86,30 +135,16 @@ class TextureRequest(BaseModel):
         ...,
         description="job_id trả về từ Stage 1 (phải có status=completed)"
     )
-    front_image_base64: str = Field(
-        ...,
-        description="Ảnh front base64 dùng để sơn texture"
-    )
     texture_4k: bool = Field(
         False,
         description="Nếu True thì upscale texture lên 4K bằng RealESRGAN (nếu có weights)."
-    )
-    images_base64: Optional[Dict[str, str]] = Field(
-        None,
-        description='Ảnh các góc phụ (left/right/back) để paint multi-view. Tùy chọn.'
     )
 
     class Config:
         json_schema_extra = {
             "example": {
                 "shape_job_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-                "front_image_base64": "iVBORw0KGgoAAAA...",
-                "texture_4k": False,
-                "images_base64": {
-                    "left": "iVBORw0KGgoAAAA...",
-                    "right": "iVBORw0KGgoAAAA...",
-                    "back": "iVBORw0KGgoAAAA..."
-                }
+                "texture_4k": False
             }
         }
 
@@ -154,7 +189,7 @@ class WorkerStatusResponse(BaseModel):
 async def generate_shape_mv(
     request: ShapeRequest,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_uid),
+    auth: AuthContext = Depends(get_auth_context),
 ):
     """
     ## Stage 1 — Sinh white mesh từ ảnh multiview
@@ -178,11 +213,15 @@ async def generate_shape_mv(
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Ảnh '{view}' không hợp lệ: {e}")
 
+    _deduct_cost(auth, db, TOKENS_PER_SHAPE)
+    saved_urls = _save_mv_images(auth.user_id, request.images_base64)
+    input_image_url = ""
+
     try:
         result = await hunyuan3d_mv_service.generate_shape(
             db=db,
             images_base64=request.images_base64,
-            input_image_url=request.input_image_url,
+            input_image_url=input_image_url,
             remove_background=request.remove_background,
             num_inference_steps=request.num_inference_steps,
             octree_resolution=request.octree_resolution,
@@ -190,7 +229,12 @@ async def generate_shape_mv(
             guidance_scale=request.guidance_scale,
             # FIX: truyền model_name (trước đây bị bỏ sót ở JSON endpoint)
             model_name=request.model_name,
-            user_id=user_id,
+            user_id=auth.user_id,
+
+            front_image_url=saved_urls.get("front"),
+            left_image_url=saved_urls.get("left"),
+            right_image_url=saved_urls.get("right"),
+            back_image_url=saved_urls.get("back"),
         )
         return StageResponse(**result)
     except Exception as e:
@@ -210,7 +254,7 @@ async def generate_shape_mv_upload(
     polycount: Optional[int] = Form(None),
     guidance_scale: float = Form(5.0),
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_uid),
+    auth: AuthContext = Depends(get_auth_context),
 ):
     """
     ## Stage 1 — Upload file trực tiếp (thay vì gửi base64)
@@ -239,7 +283,9 @@ async def generate_shape_mv_upload(
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"File '{view}' không hợp lệ: {e}")
 
-    input_image_url = f"{settings.EXTERNAL_URL}/uploads/mv_{user_id}_{front.filename}"
+    _deduct_cost(auth, db, TOKENS_PER_SHAPE)
+    saved_urls = _save_mv_images(auth.user_id, images_base64)
+    input_image_url = ""
     resolved_model_name = model_name or Path(front.filename).stem
 
     try:
@@ -253,7 +299,12 @@ async def generate_shape_mv_upload(
             polycount=polycount,
             guidance_scale=guidance_scale,
             model_name=resolved_model_name,
-            user_id=user_id,
+            user_id=auth.user_id,
+
+            front_image_url=saved_urls.get("front"),
+            left_image_url=saved_urls.get("left"),
+            right_image_url=saved_urls.get("right"),
+            back_image_url=saved_urls.get("back"),
         )
         return StageResponse(**result)
     except Exception as e:
@@ -268,7 +319,7 @@ async def generate_shape_mv_upload(
 async def generate_texture_mv(
     request: TextureRequest,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_uid),
+    auth: AuthContext = Depends(get_auth_context),
 ):
     """
     ## Stage 2 — Sơn texture lên white mesh
@@ -280,20 +331,37 @@ async def generate_texture_mv(
 
     **Thời gian:** ~3-8 phút tùy server/GPU.
     """
-    # Validate ảnh front
-    try:
-        Image.open(BytesIO(base64.b64decode(request.front_image_base64)))
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"front_image_base64 không hợp lệ: {e}")
+    job = db.query(ModelJob).filter(
+        ModelJob.job_id == request.shape_job_id,
+        ModelJob.user_id == auth.user_id,
+    ).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job không tồn tại")
+
+    front_b64 = _load_b64(job.front_image_url)
+    if not front_b64:
+        raise HTTPException(status_code=400, detail="Không tìm thấy ảnh front để texture")
+
+    images_base64 = {}
+    for view, url in {
+        "left": job.left_image_url,
+        "right": job.right_image_url,
+        "back": job.back_image_url,
+    }.items():
+        b64 = _load_b64(url)
+        if b64:
+            images_base64[view] = b64
+
+    _deduct_cost(auth, db, TOKENS_PER_TEXTURE)
 
     try:
         result = await hunyuan3d_mv_service.generate_texture(
             db=db,
             shape_job_id=request.shape_job_id,
-            front_image_base64=request.front_image_base64,
+            front_image_base64=front_b64,
             texture_4k=request.texture_4k,
-            user_id=user_id,
-            images_base64=request.images_base64,
+            user_id=auth.user_id,
+            images_base64=images_base64 or None,
         )
         return StageResponse(**result)
     # FIX: ValueError (Stage 1 chưa completed) → 400, không phải 500
@@ -311,7 +379,7 @@ async def generate_texture_mv_upload(
     front: UploadFile = File(..., description="Ảnh front để sơn texture"),
     texture_4k: bool = Form(False),
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_uid),
+    auth: AuthContext = Depends(get_auth_context),
 ):
     """
     ## Stage 2 — Upload file ảnh front trực tiếp
@@ -331,13 +399,15 @@ async def generate_texture_mv_upload(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"File front không hợp lệ: {e}")
 
+    _deduct_cost(auth, db, TOKENS_PER_TEXTURE)
+
     try:
         result = await hunyuan3d_mv_service.generate_texture(
             db=db,
             shape_job_id=shape_job_id,
             front_image_base64=front_b64,
             texture_4k=texture_4k,
-            user_id=user_id,
+            user_id=auth.user_id,
         )
         return StageResponse(**result)
     # FIX: ValueError (Stage 1 chưa completed) → 400, không phải 500
