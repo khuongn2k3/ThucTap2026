@@ -3,7 +3,7 @@ Hunyuan3D-2mv Router - 2 endpoint tách biệt:
   POST /generate-shape-mv   → Stage 1: sinh white mesh
   POST /generate-texture-mv → Stage 2: sơn texture lên white mesh
 """
-from fastapi import APIRouter, HTTPException, Depends, File, UploadFile, Form
+from fastapi import APIRouter, HTTPException, Depends, File, UploadFile, Form, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Any, Dict, Optional
@@ -25,7 +25,7 @@ from app.services.hunyuan3d_mv_service import hunyuan3d_mv_service
 import uuid
 
 def _save_mv_images(user_id: int, images_b64: Dict[str, str]) -> Dict[str, str]:
-    base_dir = Path(settings.UPLOAD_DIR) / "mv"
+    base_dir = Path(settings.UPLOAD_TEMP_DIR) / "mv"
     base_dir.mkdir(parents=True, exist_ok=True)
 
     job_dir = base_dir / str(uuid.uuid4())
@@ -47,7 +47,7 @@ def _load_b64(url: Optional[str]) -> Optional[str]:
     if not url:
         return None
     rel = url.split("/uploads/")[-1]
-    path = Path(settings.UPLOAD_DIR) / rel
+    path = Path(settings.UPLOAD_TEMP_DIR) / rel
     if not path.exists():
         return None
     return base64.b64encode(path.read_bytes()).decode()
@@ -399,6 +399,22 @@ async def generate_texture_mv_upload(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"File front không hợp lệ: {e}")
 
+    # Load left/right/back từ DB (đã lưu ở Stage 1)
+    job = db.query(ModelJob).filter(
+        ModelJob.job_id == shape_job_id,
+        ModelJob.user_id == auth.user_id,
+    ).first()
+    images_base64: Dict[str, str] = {}
+    if job:
+        for view, url in {
+            "left":  job.left_image_url,
+            "right": job.right_image_url,
+            "back":  job.back_image_url,
+        }.items():
+            b64 = _load_b64(url)
+            if b64:
+                images_base64[view] = b64
+
     _deduct_cost(auth, db, TOKENS_PER_TEXTURE)
 
     try:
@@ -408,6 +424,7 @@ async def generate_texture_mv_upload(
             front_image_base64=front_b64,
             texture_4k=texture_4k,
             user_id=auth.user_id,
+            images_base64=images_base64 or None,
         )
         return StageResponse(**result)
     # FIX: ValueError (Stage 1 chưa completed) → 400, không phải 500
@@ -552,7 +569,7 @@ async def unload_shape_pipeline():
 # ────────────────────────────────────────────────────────────────────────────
 
 @router.get("/job-progress-sse/{job_id}")
-async def job_progress_sse(job_id: str, db: Session = Depends(get_db)):
+async def job_progress_sse(job_id: str, request: Request, db: Session = Depends(get_db)):
     """
     SSE stream progress cho 1 job cụ thể.
 
@@ -563,6 +580,17 @@ async def job_progress_sse(job_id: str, db: Session = Depends(get_db)):
 
     Stream tự đóng sau khi nhận event `completed` hoặc `failed`.
     """
+    # Lấy Origin từ request để trả lại đúng header CORS cho StreamingResponse
+    # (FastAPI CORS middleware không inject headers vào StreamingResponse đáng tin cậy)
+    origin = request.headers.get("origin", "*")
+
+    sse_headers = {
+        "Content-Type":              "text/event-stream",
+        "Cache-Control":             "no-cache",
+        "X-Accel-Buffering":         "no",
+        "Access-Control-Allow-Origin":      origin,
+        "Access-Control-Allow-Credentials": "true",
+    }
     # FIX: Nếu job đã xong trước khi client connect SSE → trả ngay 1 event rồi đóng.
     # Tránh trường hợp tạo queue rỗng → client treo mãi không có event nào.
     try:
@@ -589,10 +617,7 @@ async def job_progress_sse(job_id: str, db: Session = Depends(get_db)):
         return StreamingResponse(
             one_shot_generator(),
             media_type="text/event-stream",
-            headers={
-                "Cache-Control":     "no-cache",
-                "X-Accel-Buffering": "no",
-            },
+            headers=sse_headers,
         )
 
     # Job đang chạy → lấy queue hiện có, hoặc tạo mới nếu client connect trước service
@@ -609,7 +634,7 @@ async def job_progress_sse(job_id: str, db: Session = Depends(get_db)):
                     item = await asyncio.wait_for(queue.get(), timeout=20.0)
                 except asyncio.TimeoutError:
                     # Không có event mới → gửi comment heartbeat (chuẩn SSE)
-                    yield b": heartbeat\n\n"
+                    yield b"event: heartbeat\ndata: {}\n\n"
                     continue
 
                 event = item.get("event", "message")
@@ -635,8 +660,5 @@ async def job_progress_sse(job_id: str, db: Session = Depends(get_db)):
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control":     "no-cache",
-            "X-Accel-Buffering": "no",   # tắt buffer nginx → event đến ngay lập tức
-        },
+        headers=sse_headers,
     )

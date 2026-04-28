@@ -549,19 +549,23 @@ class Hunyuan3DMvService:
 
             job = db.query(ModelJob).filter(ModelJob.job_id == job_id).first()
 
-            from app.utils.thumbnail_renderer import render_thumbnail
-
-            thumb_bytes = render_thumbnail(str(output_path))
-            if thumb_bytes:
-                thumb_dir = Path(settings.UPLOAD_DIR) / "thumbnails"
-                thumb_dir.mkdir(parents=True, exist_ok=True)
-                thumb_path = thumb_dir / f"{job_id}.webp"
-                thumb_path.write_bytes(thumb_bytes)
-                thumb_url = f"{settings.EXTERNAL_URL}/uploads/thumbnails/{job_id}.webp"
-
-                if job:
-                    job.input_image_url = thumb_url
-                    db.commit()
+            try:
+                from app.services.thumbnail_renderer import render_thumbnail
+                thumb_bytes = render_thumbnail(str(output_path))
+                if thumb_bytes:
+                    thumb_dir = Path(settings.UPLOAD_TEMP_DIR) / "thumbnails"
+                    thumb_dir.mkdir(parents=True, exist_ok=True)
+                    thumb_path = thumb_dir / f"{job_id}.webp"
+                    thumb_path.write_bytes(thumb_bytes)
+                    thumb_url = f"{settings.EXTERNAL_URL}/uploads/thumbnails/{job_id}.webp"
+                    if job:
+                        job.input_image_url = thumb_url
+                        db.commit()
+                    print(f"🖼️  [{job_id}] Stage 1 thumbnail OK → {thumb_url}")
+                else:
+                    print(f"⚠️  [{job_id}] Stage 1 thumbnail trả về None, bỏ qua")
+            except Exception as thumb_err:
+                print(f"⚠️  [{job_id}] Stage 1 thumbnail thất bại (bỏ qua, job vẫn OK): {thumb_err}")
 
             if job:
                 job.status = 'completed'
@@ -889,18 +893,23 @@ class Hunyuan3DMvService:
 
             job = db.query(ModelJob).filter(ModelJob.job_id == tex_job_id).first()
 
-            from app.utils.thumbnail_renderer import render_thumbnail
-            thumb_bytes = render_thumbnail(str(output_path))
-            if thumb_bytes:
-                thumb_dir = Path(settings.UPLOAD_DIR) / "thumbnails"
-                thumb_dir.mkdir(parents=True, exist_ok=True)
-                thumb_path = thumb_dir / f"{tex_job_id}.webp"
-                thumb_path.write_bytes(thumb_bytes)
-                thumb_url = f"{settings.EXTERNAL_URL}/uploads/thumbnails/{tex_job_id}.webp"
-
-                if job:
-                    job.input_image_url = thumb_url
-                    db.commit()
+            try:
+                from app.services.thumbnail_renderer import render_thumbnail
+                thumb_bytes = render_thumbnail(str(output_path))
+                if thumb_bytes:
+                    thumb_dir = Path(settings.UPLOAD_TEMP_DIR) / "thumbnails"
+                    thumb_dir.mkdir(parents=True, exist_ok=True)
+                    thumb_path = thumb_dir / f"{tex_job_id}.webp"
+                    thumb_path.write_bytes(thumb_bytes)
+                    thumb_url = f"{settings.EXTERNAL_URL}/uploads/thumbnails/{tex_job_id}.webp"
+                    if job:
+                        job.input_image_url = thumb_url
+                        db.commit()
+                    print(f"🖼️  [{tex_job_id}] Stage 2 thumbnail OK → {thumb_url}")
+                else:
+                    print(f"⚠️  [{tex_job_id}] Stage 2 thumbnail trả về None, bỏ qua")
+            except Exception as thumb_err:
+                print(f"⚠️  [{tex_job_id}] Stage 2 thumbnail thất bại (bỏ qua, job vẫn OK): {thumb_err}")
 
             if job:
                 job.status = 'completed'
@@ -1264,7 +1273,7 @@ class Hunyuan3DMvService:
                     print(f"Failed to delete {file_path}: {e}")
 
         # ── Delete thumbnail ────────────────────────────────────────────
-        thumb_path = Path(settings.UPLOAD_DIR) / "thumbnails" / f"{job_id}.webp"
+        thumb_path = Path(settings.UPLOAD_TEMP_DIR) / "thumbnails" / f"{job_id}.webp"
         if thumb_path.exists():
             try:
                 thumb_path.unlink()
@@ -1278,7 +1287,7 @@ class Hunyuan3DMvService:
             if not url:
                 return
             rel = url.split("/uploads/")[-1]
-            path = Path(settings.UPLOAD_DIR) / rel
+            path = Path(settings.UPLOAD_TEMP_DIR) / rel
             mv_dirs.add(path.parent)
             if path.exists():
                 try:
