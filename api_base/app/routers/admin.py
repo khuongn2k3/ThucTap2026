@@ -58,7 +58,7 @@ class UpdateTokensRequest(BaseModel):
 class AdminJobResponse(BaseModel):
     id: int
     job_id: str
-    user_id: int
+    user_id: Optional[int] = None
     user_name: Optional[str] = None
     status: str
     model_name: Optional[str] = None
@@ -245,6 +245,44 @@ async def update_user_tokens(
 # GET /jobs
 # =========================================
 
+# =========================================
+# DELETE /users/{user_id}
+# =========================================
+
+@router.delete("/users/{user_id}")
+async def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """Xóa người dùng và toàn bộ job của họ (Admin only)."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Người dùng không tồn tại")
+
+    if user.id == admin.id:
+        raise HTTPException(
+            status_code=400,
+            detail="Không thể tự xóa tài khoản của chính mình",
+        )
+
+    # Xóa hết job của user trước
+    db.query(ModelJob).filter(ModelJob.user_id == user_id).delete()
+
+    # Rồi mới xóa user
+    db.delete(user)
+    db.commit()
+
+    return {
+        "message": f"Đã xóa tài khoản {user.name} và toàn bộ job liên quan",
+        "user_id": user_id,
+    }
+
+
+# =========================================
+# GET /jobs
+# =========================================
+
 @router.get("/jobs")
 async def list_jobs(
     limit: int = Query(20, ge=1, le=100),
@@ -273,7 +311,7 @@ async def list_jobs(
     jobs = query.order_by(ModelJob.created_at.desc()).offset(offset).limit(limit).all()
 
     # Lấy user names theo batch để tránh N+1 query
-    user_ids = list({j.user_id for j in jobs})
+    user_ids = list({j.user_id for j in jobs if j.user_id is not None})
     users_map: dict[int, str] = {}
     if user_ids:
         users = db.query(User.id, User.name).filter(User.id.in_(user_ids)).all()

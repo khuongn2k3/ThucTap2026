@@ -24,7 +24,7 @@ from app.services.hunyuan3d_mv_service import hunyuan3d_mv_service
 
 import uuid
 
-def _save_mv_images(user_id: int, images_b64: Dict[str, str]) -> Dict[str, str]:
+def _save_mv_images(user_id: Optional[int], images_b64: Dict[str, str]) -> Dict[str, str]:
     base_dir = Path(settings.UPLOAD_TEMP_DIR) / "mv"
     base_dir.mkdir(parents=True, exist_ok=True)
 
@@ -331,10 +331,10 @@ async def generate_texture_mv(
 
     **Thời gian:** ~3-8 phút tùy server/GPU.
     """
-    job = db.query(ModelJob).filter(
-        ModelJob.job_id == request.shape_job_id,
-        ModelJob.user_id == auth.user_id,
-    ).first()
+    job = db.query(ModelJob).filter(ModelJob.job_id == request.shape_job_id)
+    if auth.user_id is not None:
+        job = job.filter(ModelJob.user_id == auth.user_id)
+    job = job.first()
     if not job:
         raise HTTPException(status_code=404, detail="Job không tồn tại")
 
@@ -400,10 +400,10 @@ async def generate_texture_mv_upload(
         raise HTTPException(status_code=400, detail=f"File front không hợp lệ: {e}")
 
     # Load left/right/back từ DB (đã lưu ở Stage 1)
-    job = db.query(ModelJob).filter(
-        ModelJob.job_id == shape_job_id,
-        ModelJob.user_id == auth.user_id,
-    ).first()
+    job = db.query(ModelJob).filter(ModelJob.job_id == shape_job_id)
+    if auth.user_id is not None:
+        job = job.filter(ModelJob.user_id == auth.user_id)
+    job = job.first()
     images_base64: Dict[str, str] = {}
     if job:
         for view, url in {

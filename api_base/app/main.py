@@ -103,6 +103,11 @@ gallery_dir = Path("utils/gallery")
 gallery_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/gallery-files", StaticFiles(directory=str(gallery_dir)), name="gallery-files")
 
+# Thumbnails
+thumbnails_dir = Path(settings.UPLOAD_TEMP_DIR) / "thumbnails"
+thumbnails_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads/thumbnails", StaticFiles(directory=str(thumbnails_dir)), name="thumbnails")
+
 
 # =========================================
 # ROUTERS

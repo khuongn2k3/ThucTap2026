@@ -13,7 +13,7 @@ class ModelJob(Base):
     __tablename__ = "model_jobs"
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     job_id = Column(String(100), unique=True, nullable=False, index=True)
     status = Column(
         Enum('pending', 'processing', 'completed', 'failed'),

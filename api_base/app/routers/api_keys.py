@@ -116,12 +116,19 @@ async def create_api_key(
     key_hash = _hash_key(raw_key)
     preview = _preview(raw_key)
 
+    # Tự động resolve owner_user_id từ owner_email nếu không truyền id
+    owner_user_id = request.owner_user_id
+    if owner_user_id is None and request.owner_email:
+        owner = db.query(User).filter(User.email == request.owner_email).first()
+        if owner:
+            owner_user_id = owner.id
+
     api_key = ApiKey(
         name=request.name,
         key_hash=key_hash,
         key_preview=preview,
         owner_email=request.owner_email,
-        owner_user_id=request.owner_user_id,
+        owner_user_id=owner_user_id,
         quota_per_month=request.quota_per_month,
         expires_at=request.expires_at,
         note=request.note,

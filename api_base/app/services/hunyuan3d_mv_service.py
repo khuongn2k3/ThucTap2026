@@ -1,10 +1,10 @@
 """
-Hunyuan3D-2mv Service — 4 cải tiến gốc + thêm SSE progress queue:
-  1. Swap pipeline VRAM (chỉ 1 pipeline tại 1 thời điểm)
-  2. Xóa Shape khỏi VRAM ngay khi không cần texture (uncheck)
-  3. Xóa Texture khỏi VRAM ngay sau khi Stage 2 xong
-  4. Đo tài nguyên (VRAM, RAM) và thời gian mỗi stage
-  5. [MỚI] asyncio.Queue per-job → SSE push progress realtime về frontend
+Hunyuan3D-2mv Service — core improvements + SSE progress queue:
+  1. Pipeline VRAM swapping (only one pipeline loaded at a time)
+  2. Unload shape pipeline from VRAM immediately when texture is not requested
+  3. Unload texture pipeline from VRAM immediately after Stage 2 completes
+  4. Per-stage resource tracking (VRAM, RAM) and wall-clock timing
+  5. asyncio.Queue per-job → real-time SSE progress push to frontend
 """
 import sys
 import uuid
@@ -42,17 +42,17 @@ except ImportError as e:
     Hunyuan3DPaintPipeline = None
     HUNYUAN3D_MV_AVAILABLE = False
 
-# VRAM tối thiểu cần có trước khi cho job chạy
+# Minimum free VRAM required before a job is allowed to run
 SHAPE_VRAM_REQUIRED_GB   = 14.0
 TEXTURE_VRAM_REQUIRED_GB = 14.0
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# Helper: đo tài nguyên
+# Helpers: resource monitoring
 # ════════════════════════════════════════════════════════════════════════════
 
 def _get_resources() -> Dict[str, float]:
-    """Lấy VRAM và RAM hiện tại. Trả về dict với đơn vị GB."""
+    """Return current VRAM and RAM usage as a dict (values in GB)."""
     info: Dict[str, float] = {}
 
     # VRAM
@@ -85,7 +85,7 @@ def _get_resources() -> Dict[str, float]:
 
 
 def _reset_vram_peak():
-    """Reset peak VRAM counter (gọi trước mỗi stage để đo peak chính xác)."""
+    """Reset peak VRAM counter. Call before each stage for accurate peak measurement."""
     try:
         import torch
         if torch.cuda.is_available():
@@ -95,10 +95,10 @@ def _reset_vram_peak():
 
 
 def _log_resources(label: str, before: Dict, after: Dict, duration: float):
-    """In log tài nguyên so sánh trước/sau."""
+    """Log resource usage comparison (before vs after) for a stage."""
     print(f"\n{'─'*55}")
     print(f"📊 {label}")
-    print(f"   ⏱️  Thời gian  : {duration:.1f}s ({duration/60:.1f} phút)")
+    print(f"   ⏱️  Duration    : {duration:.1f}s ({duration/60:.1f} min)")
     print(f"   🎮 VRAM used  : {before['vram_used_gb']:.2f}GB → {after['vram_used_gb']:.2f}GB "
           f"(+{after['vram_used_gb']-before['vram_used_gb']:.2f}GB)")
     print(f"   🎮 VRAM peak  : {after['vram_peak_gb']:.2f}GB")
@@ -109,7 +109,7 @@ def _log_resources(label: str, before: Dict, after: Dict, duration: float):
 
 
 def _build_metrics(before: Dict, after: Dict, duration: float) -> Dict[str, Any]:
-    """Tạo dict metrics để trả về trong API response."""
+    """Build a metrics dict for inclusion in the API response."""
     return {
         "duration_seconds":   round(duration, 2),
         "duration_minutes":   round(duration / 60, 2),
@@ -143,30 +143,30 @@ class Hunyuan3DMvService:
             self.tex_pipeline:   Optional[object] = None
             self.rembg:          Optional[object] = None
             self.task_cache: Dict[str, Dict[str, Any]] = {}
-            self._tex_thread_active: bool = False  # Bug2 fix: theo dõi thread texture đang chạy
+            self._tex_thread_active: bool = False  # Bug2 fix: track whether texture thread is active
 
-            # Queue xếp hàng job — thay thế lock cứng
-            # Mỗi item trong queue là dict mô tả 1 job cần chạy
+            # Job queue — replaces hard locking
+            # Each item is a dict describing one pending job
             self._pending_queue: asyncio.Queue = asyncio.Queue()
             self._worker_task: Optional[asyncio.Task] = None
 
-            # ── ETA stats — rolling average duration (giây) ──────────────
-            # Lưu riêng cho shape và texture vì thời gian khác nhau
-            # Mỗi entry: deque tối đa 10 mẫu gần nhất
+            # ── ETA stats — rolling average duration (seconds) ───────────
+            # Tracked separately for shape and texture (different runtimes)
+            # Each entry: deque capped at 10 most recent samples
             from collections import deque
             self._duration_stats: Dict[str, Any] = {
                 "shape":   deque(maxlen=10),
                 "texture": deque(maxlen=10),
             }
-            # Fallback mặc định khi chưa có dữ liệu thực
+            # Fallback defaults when no real data is available yet
             self._duration_defaults: Dict[str, float] = {
                 "shape":   90.0,
                 "texture": 90.0,
             }
 
-            # ── [MỚI] SSE Queue registry ─────────────────────────────────
+            # ── SSE Queue registry ───────────────────────────────────────
             # Map job_id → asyncio.Queue
-            # Queue item format: dict với keys: event, data
+            # Queue item format: dict with keys: event, data
             # event: "progress" | "completed" | "failed" | "heartbeat"
             self._sse_queues: Dict[str, asyncio.Queue] = {}
 
@@ -407,7 +407,7 @@ class Hunyuan3DMvService:
 
         self.tex_pipeline = Hunyuan3DPaintPipeline.from_pretrained(
             str(MV_DIR),
-            subfolder='hunyuan3d-paint-v2-0-turbo',
+            subfolder='hunyuan3d-paint-v2-0',
         )
 
         # Đảm bảo rembg luôn có khi texture pipeline được load.
