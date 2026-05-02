@@ -60,8 +60,19 @@ router = APIRouter()
 # Token deduction
 # ────────────────────────────────────────────────────────────────────────────
 
-TOKENS_PER_SHAPE = 1
-TOKENS_PER_TEXTURE = 1
+_PRICING_FILE = Path(__file__).resolve().parent.parent / "pricing.json"
+_PRICING_DEFAULTS = {"stage1_tokens": 25, "stage2_tokens": 25}
+
+def _get_pricing() -> dict:
+    try:
+        if _PRICING_FILE.exists():
+            return {**_PRICING_DEFAULTS, **json.loads(_PRICING_FILE.read_text())}
+    except Exception:
+        pass
+    return _PRICING_DEFAULTS.copy()
+
+def TOKENS_PER_SHAPE()   -> int: return _get_pricing()["stage1_tokens"]
+def TOKENS_PER_TEXTURE() -> int: return _get_pricing()["stage2_tokens"]
 
 def _deduct_cost(auth: AuthContext, db: Session, cost: int = 1) -> None:
     """
@@ -213,7 +224,7 @@ async def generate_shape_mv(
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Ảnh '{view}' không hợp lệ: {e}")
 
-    _deduct_cost(auth, db, TOKENS_PER_SHAPE)
+    _deduct_cost(auth, db, TOKENS_PER_SHAPE())
     saved_urls = _save_mv_images(auth.user_id, request.images_base64)
     input_image_url = ""
 
@@ -283,7 +294,7 @@ async def generate_shape_mv_upload(
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"File '{view}' không hợp lệ: {e}")
 
-    _deduct_cost(auth, db, TOKENS_PER_SHAPE)
+    _deduct_cost(auth, db, TOKENS_PER_SHAPE())
     saved_urls = _save_mv_images(auth.user_id, images_base64)
     input_image_url = ""
     resolved_model_name = model_name or Path(front.filename).stem
@@ -352,7 +363,7 @@ async def generate_texture_mv(
         if b64:
             images_base64[view] = b64
 
-    _deduct_cost(auth, db, TOKENS_PER_TEXTURE)
+    _deduct_cost(auth, db, TOKENS_PER_TEXTURE())
 
     try:
         result = await hunyuan3d_mv_service.generate_texture(
@@ -415,7 +426,7 @@ async def generate_texture_mv_upload(
             if b64:
                 images_base64[view] = b64
 
-    _deduct_cost(auth, db, TOKENS_PER_TEXTURE)
+    _deduct_cost(auth, db, TOKENS_PER_TEXTURE())
 
     try:
         result = await hunyuan3d_mv_service.generate_texture(

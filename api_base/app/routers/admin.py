@@ -11,7 +11,9 @@ Endpoints:
 """
 
 from datetime import datetime
+from pathlib import Path
 from typing import List, Literal, Optional
+import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -53,6 +55,13 @@ class UpdateBanRequest(BaseModel):
 
 class UpdateTokensRequest(BaseModel):
     delta: int  # Dương = cộng, âm = trừ
+
+
+class PricingConfig(BaseModel):
+    stage1_tokens: int = 25
+    stage2_tokens: int = 25
+    signup_bonus: int = 100
+    daily_bonus: int = 0
 
 
 class AdminJobResponse(BaseModel):
@@ -239,6 +248,48 @@ async def update_user_tokens(
         "tokens": user.tokens,
         "delta": request.delta,
     }
+
+
+# =========================================
+# GET /pricing  &  POST /pricing
+# =========================================
+
+PRICING_FILE = Path(__file__).resolve().parent.parent / "pricing.json"
+
+DEFAULT_PRICING = {
+    "stage1_tokens": 25,
+    "stage2_tokens": 25,
+    "signup_bonus":  100,
+    "daily_bonus":   0,
+}
+
+def _load_pricing() -> dict:
+    try:
+        if PRICING_FILE.exists():
+            return {**DEFAULT_PRICING, **json.loads(PRICING_FILE.read_text())}
+    except Exception:
+        pass
+    return DEFAULT_PRICING.copy()
+
+def _save_pricing(data: dict):
+    PRICING_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+
+
+@router.get("/pricing")
+async def get_pricing(admin: User = Depends(get_current_admin)):
+    """Lấy cấu hình giá token hiện tại."""
+    return _load_pricing()
+
+
+@router.post("/pricing")
+async def update_pricing(
+    body: PricingConfig,
+    admin: User = Depends(get_current_admin),
+):
+    """Cập nhật giá token cho Stage 1, Stage 2, bonus đăng ký, bonus hàng ngày."""
+    data = body.model_dump()
+    _save_pricing(data)
+    return {"message": "Đã lưu cấu hình giá token", **data}
 
 
 # =========================================
