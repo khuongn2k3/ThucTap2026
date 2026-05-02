@@ -276,7 +276,7 @@ export default function Convert3D() {
   const [withTexture, setWithTexture]   = useState(true)
   const [texture4k, setTexture4k]       = useState(false)
   const [quality, setQuality]           = useState("standard")
-  const [polycount, setPolycount]       = useState(500000)
+  const [polycount, setPolycount]       = useState(1000000)
   const [guidanceScale, setGuidanceScale] = useState(5.0)
   const [step, setStep]             = useState(STEPS.IDLE)
   const [shapeJobId,  setShapeJobId]    = useState(null)
@@ -537,6 +537,7 @@ export default function Convert3D() {
   }, [])
 
   const onErr = useCallback((msg) => {
+    console.error("[Convert3D ERROR]", msg)
     stopSSE(); setError(msg); setStep(STEPS.ERROR)
   }, [stopSSE])
 
@@ -559,6 +560,7 @@ export default function Convert3D() {
         onDone(d.output_model_url, d.metrics, d.submission_id)
       },
       onFailed: (d) => {
+        console.error("[Convert3D SSE failed]", JSON.stringify(d))
         onErr(d.error || d.message || "Job failed")
       },
     })
@@ -582,7 +584,10 @@ export default function Convert3D() {
         setCurrentJobId(r.data.job_id)
         setSubmissionId(sid ?? null); setCollected(false)
       })
-    } catch (e) { onErr(e.response?.data?.detail || "Stage 2 error") }
+    } catch (e) {
+      console.error("[Convert3D Stage 2 catch]", e?.response?.data || e?.message || e)
+      onErr(e.response?.data?.detail || "Stage 2 error")
+    }
   }, [front, doSSE, onErr, texture4k])
 
   const handleGenerate = async () => {
@@ -598,7 +603,7 @@ export default function Convert3D() {
       if (left) fd.append("left", left)
       if (right) fd.append("right", right)
       if (back) fd.append("back", back)
-      fd.append("octree_resolution", "450")
+      fd.append("octree_resolution", "512")
       fd.append("polycount", polycount)
       fd.append("guidance_scale", guidanceScale)
       const r = await generateShapeMv(fd)
@@ -619,7 +624,10 @@ export default function Convert3D() {
           setStep(STEPS.DONE)
         }
       })
-    } catch (e) { onErr(e.response?.data?.detail || "Stage 1 error") }
+    } catch (e) {
+      console.error("[Convert3D Stage 1 catch]", e?.response?.data || e?.message || e)
+      onErr(e.response?.data?.detail || "Stage 1 error")
+    }
   }
 
   const handleReset = () => {
@@ -806,14 +814,14 @@ export default function Convert3D() {
                   {polycount.toLocaleString()}
                 </span>
               </div>
-              <input type="range" min={1000} max={500000} step={1000}
+              <input type="range" min={1000} max={1000000} step={1000}
                 value={polycount} disabled={isRunning}
                 onChange={e => setPolycount(parseInt(e.target.value))}
                 style={{ width: "100%", accentColor: "#3b82f6", opacity: isRunning ? 0.4 : 1 }}
               />
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 3 }}>
                 <span style={{ fontSize: 9, color: "#444" }}>1K</span>
-                <span style={{ fontSize: 9, color: "#555" }}>500K</span>
+                <span style={{ fontSize: 9, color: "#555" }}>1M</span>
               </div>
             </div>
 

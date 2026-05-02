@@ -14,6 +14,7 @@ DROP TABLE IF EXISTS gallery_collections;
 DROP TABLE IF EXISTS gallery_submissions;
 DROP TABLE IF EXISTS payments;
 DROP TABLE IF EXISTS model_jobs;
+DROP TABLE IF EXISTS api_keys;
 DROP TABLE IF EXISTS users;
 
 -- Re-enable foreign key checks
@@ -31,6 +32,7 @@ CREATE TABLE users (
     google_id VARCHAR(255) NULL UNIQUE,
     avatar_url VARCHAR(500) NULL,
     tokens INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Token balance for 3D conversions',
+    is_banned BOOLEAN NOT NULL DEFAULT FALSE COMMENT 'Account banned by admin',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
@@ -73,7 +75,13 @@ CREATE TABLE model_jobs (
     user_id INT UNSIGNED NOT NULL,
     job_id VARCHAR(100) NOT NULL UNIQUE,
     status ENUM('pending', 'processing', 'completed', 'failed') NOT NULL DEFAULT 'pending',
+    
     input_image_url VARCHAR(500) NOT NULL,
+    front_image_url VARCHAR(500) NULL,
+    left_image_url  VARCHAR(500) NULL,
+    right_image_url VARCHAR(500) NULL,
+    back_image_url  VARCHAR(500) NULL,
+
     output_model_url VARCHAR(500) NULL,
     model_name VARCHAR(255) NULL COMMENT 'Model name from upload filename',
     submission_id INT UNSIGNED NULL COMMENT 'Link to gallery_submissions after publishing',
@@ -168,6 +176,53 @@ CREATE TABLE gallery_collections (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
+-- =========================================
+-- TABLE 8: api_keys
+-- =========================================
+CREATE TABLE IF NOT EXISTS api_keys (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+
+    -- Tên hiển thị để admin nhận biết
+    name VARCHAR(255) NOT NULL,
+
+    -- Giá trị key đầy đủ — CHỈ lưu hash (SHA-256), không lưu plaintext
+    -- Plaintext chỉ trả về 1 lần duy nhất khi tạo
+    key_hash VARCHAR(64) NOT NULL UNIQUE COMMENT 'SHA-256 hash of the raw key',
+
+    -- Tiền tố 12 ký tự đầu để hiển thị trong admin (vd: sk_forma_xxxx)
+    key_preview VARCHAR(20) NOT NULL COMMENT 'First 12 chars + last 4 for display',
+
+    -- Chủ key (không bắt buộc phải là user trong hệ thống)
+    owner_email VARCHAR(255) NULL COMMENT 'Email người được cấp key',
+    owner_user_id INT UNSIGNED NULL COMMENT 'Nếu chủ key là user trong DB',
+
+    -- Quyền hạn
+    quota_per_month INT UNSIGNED NULL COMMENT 'NULL = không giới hạn',
+    calls_used INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Tổng lượt gọi từ trước đến nay',
+    calls_this_month INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Lượt gọi tháng hiện tại',
+    reset_at DATE NULL COMMENT 'Ngày reset calls_this_month gần nhất',
+
+    -- Trạng thái
+    status ENUM('active', 'revoked', 'expired') NOT NULL DEFAULT 'active',
+
+    -- Thời hạn
+    expires_at DATE NULL COMMENT 'NULL = không hết hạn',
+
+    -- Ghi chú của admin
+    note TEXT NULL,
+
+    -- Timestamps
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_used_at DATETIME NULL COMMENT 'Lần cuối key được dùng',
+
+    FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX idx_key_hash (key_hash),
+    INDEX idx_status (status),
+    INDEX idx_owner_email (owner_email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
 -- Add FK from model_jobs -> gallery_submissions (must be after both tables exist)
 ALTER TABLE model_jobs
     ADD CONSTRAINT fk_model_jobs_submission
@@ -176,4 +231,4 @@ ALTER TABLE model_jobs
 SET FOREIGN_KEY_CHECKS = 1;
 
 SELECT 'Schema created successfully!' AS status;
-SELECT 'Tables: users, payments, model_jobs, gallery_submissions, submission_categories, gallery_likes, gallery_collections' AS info;
+SELECT 'Tables: users, payments, model_jobs, gallery_submissions, submission_categories, gallery_likes, gallery_collections, api_keys' AS info;

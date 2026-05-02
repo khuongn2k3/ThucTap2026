@@ -122,7 +122,7 @@ export default function Gallery() {
       })
       .catch(() => setModels([]))
       .finally(() => setLoading(false))
-  }, [activeCategory, activeSort])
+  }, [activeCategory, activeSort, slug]) // fix: thêm slug để reload đúng khi URL đổi từ ngoài
 
   return (
     <>
@@ -532,24 +532,26 @@ export function ModelModal({ model, onClose, onSelect }) {
   useEffect(() => {
     const cat = model.categories?.[0]
     if (!cat) return
-    import("../services/api").then(({ default: apiMod }) => {
-      apiMod.get("/gallery", { params: { category: cat.toLowerCase(), limit: 6 } })
-        .then(res => {
-          const others = (res.data?.models ?? []).filter(m => m.id !== model.id)
-          setRelatedModels(others.slice(0, 4))
-        })
-        .catch(() => {})
-    })
+    // fix: dùng api đã import static thay vì dynamic import mỗi lần mở modal
+    api.get("/gallery", { params: { category: cat.toLowerCase(), limit: 6 } })
+      .then(res => {
+        const others = (res.data?.models ?? []).filter(m => m.id !== model.id)
+        setRelatedModels(others.slice(0, 4))
+      })
+      .catch(() => {})
   }, [model.id])
 
   // Parse model info: vertices, faces, texture resolution, skeleton
   // Hỗ trợ GLB, OBJ, STL
+  // fix: defer 600ms để modal render xong trước, dùng AbortController để cancel nếu modal đóng
   useEffect(() => {
     if (!model.model_url) return
     const url = model.model_url
     const ext = url.split("?")[0].split(".").pop().toLowerCase()
+    const controller = new AbortController()
 
-    fetch(url)
+    const timer = setTimeout(() => {
+    fetch(url, { signal: controller.signal })
       .then(r => r.arrayBuffer())
       .then(buf => {
 
@@ -700,7 +702,13 @@ export function ModelModal({ model, onClose, onSelect }) {
         }
 
       })
-      .catch(() => {})
+      .catch(err => { if (err.name !== "AbortError") {} })
+    }, 600) // defer: để modal render xong trước
+
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
   }, [model.model_url])
 
   const handleCollect = async () => {
@@ -1094,10 +1102,9 @@ export function ModelModal({ model, onClose, onSelect }) {
                   {relatedModels.map(m => (
                     <div key={m.id} onClick={() => onSelect(m)}
                       style={{ borderRadius:8, overflow:"hidden", background:"radial-gradient(ellipse at 50% 55%, #3a3a3a 0%, #1a1a1a 100%)", border:"1px solid #1e1e1e", cursor:"pointer", aspectRatio:"1", position:"relative" }}>
-                      {m.model_url
-                        ? <div style={{ position:"absolute", inset:0, pointerEvents:"none" }}>
-                            <ModelViewer3D src={m.model_url} style="default" autoRotate={true} interactive={false} />
-                          </div>
+                      {/* fix: dùng thumbnail/image thay vì ModelViewer3D để tránh spawn 4 WebGL context */}
+                      {m.thumbnail_url
+                        ? <img src={m.thumbnail_url} alt={m.model_name} style={{ width:"100%", height:"100%", objectFit:"cover" }} />
                         : m.image_url
                         ? <img src={m.image_url} alt={m.model_name} style={{ width:"100%", height:"100%", objectFit:"cover" }} />
                         : <div style={{ width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:24, opacity:0.3 }}>🗂</div>

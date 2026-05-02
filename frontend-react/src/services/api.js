@@ -127,44 +127,88 @@ export function getJobStatusMv(jobId) {
  */
 export function openJobSSE(jobId, { onProgress, onCompleted, onFailed, onHeartbeat } = {}) {
   const baseURL = import.meta.env.VITE_API_URL || ""
-  const url = `${baseURL}/job-progress-sse/${jobId}`
+  const sseUrl = `${baseURL}/job-progress-sse/${jobId}`
+  const pollUrl = `${baseURL}/job-status-mv/${jobId}`
 
-  const es = new EventSource(url)
+  let closed = false
+  let retryCount = 0
+  const MAX_RETRIES = 5
+  let es = null
+  let pollTimer = null
 
-  if (onProgress) {
-    es.addEventListener("progress", (e) => {
-      try { onProgress(JSON.parse(e.data)) } catch { /* ignore parse error */ }
-    })
+  function startPolling() {
+    if (closed) return
+    pollTimer = setInterval(async () => {
+      try {
+        const token = localStorage.getItem("token")
+        // Fix: dùng thẳng pollUrl đã build sẵn, không build lại
+        const res = await fetch(pollUrl, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        })
+        const data = await res.json()
+        if (data.status === "completed") {
+          clearInterval(pollTimer)
+          closed = true
+          if (onCompleted) onCompleted(data)
+        } else if (data.status === "failed") {
+          clearInterval(pollTimer)
+          closed = true
+          if (onFailed) onFailed(data)
+        } else {
+          if (onProgress) onProgress({ message: data.message || "Processing..." })
+        }
+      } catch (e) {
+        console.warn("[SSE fallback poll error]", e)
+      }
+    }, 3000)
   }
 
-  if (onCompleted) {
-    es.addEventListener("completed", (e) => {
-      try { onCompleted(JSON.parse(e.data)) } catch { /* ignore parse error */ }
-    })
-  }
+  function connect() {
+    if (closed) return
+    es = new EventSource(sseUrl)
 
-  if (onFailed) {
-    es.addEventListener("failed", (e) => {
-      try { onFailed(JSON.parse(e.data)) } catch { /* ignore parse error */ }
+    if (onProgress) es.addEventListener("progress", (e) => {
+      try { onProgress(JSON.parse(e.data)) } catch { }
     })
-  }
-
-  if (onHeartbeat) {
-    es.addEventListener("heartbeat", (e) => {
-      try { onHeartbeat(JSON.parse(e.data)) } catch { /* ignore parse error */ }
+    if (onCompleted) es.addEventListener("completed", (e) => {
+      closed = true
+      es.close() // đóng ngay để tránh onerror fire sau khi server đóng connection
+      try { onCompleted(JSON.parse(e.data)) } catch { }
     })
-  }
+    if (onFailed) es.addEventListener("failed", (e) => {
+      closed = true
+      es.close() // đóng ngay để tránh onerror fire sau khi server đóng connection
+      try { onFailed(JSON.parse(e.data)) } catch { }
+    })
+    if (onHeartbeat) es.addEventListener("heartbeat", (e) => {
+      try { onHeartbeat(JSON.parse(e.data)) } catch { }
+    })
 
-  es.onerror = (err) => {
-    // EventSource tự reconnect khi mất kết nối —
-    // chỉ gọi onFailed nếu server trả về error status (readyState === 2 = CLOSED)
-    if (es.readyState === EventSource.CLOSED) {
-      if (onFailed) onFailed({ error: "SSE connection closed unexpectedly", message: "❌ Mất kết nối server" })
+    es.onerror = () => {
+      es.close()
+      if (closed) return
+      if (retryCount < MAX_RETRIES) {
+        retryCount++
+        console.warn(`[SSE] Retry ${retryCount}/${MAX_RETRIES}...`)
+        setTimeout(connect, 3000)
+      } else {
+        console.warn("[SSE] Max retries reached, switching to polling...")
+        startPolling()
+      }
     }
   }
 
-  return es
+  connect()
+
+  return {
+    close: () => {
+      closed = true
+      if (es) es.close()
+      if (pollTimer) clearInterval(pollTimer)
+    }
+  }
 }
+
 
 // =========================================
 // 3D SINGLE-VIEW API (legacy)
@@ -189,3 +233,78 @@ export function healthCheck() {
 }
 
 export default api
+
+// =========================================
+// ADMIN — API KEYS
+// =========================================
+
+/**
+ * Lấy danh sách tất cả API keys (admin only)
+ */
+export function getApiKeys() {
+  return api.get("/admin/api-keys")
+}
+
+/**
+ * Tạo API key mới
+ * @param {object} data - { name, owner_email?, quota_per_month?, expires_at?, note? }
+ * @returns key đầy đủ (key_value chỉ trả về 1 lần duy nhất)
+ */
+export function createApiKey(data) {
+  return api.post("/admin/api-keys", data)
+}
+
+/**
+ * Thu hồi key (status → revoked, key ngừng hoạt động ngay)
+ * @param {number} keyId
+ */
+export function revokeApiKey(keyId) {
+  return api.patch(`/admin/api-keys/${keyId}/revoke`)
+}
+
+/**
+ * Xóa vĩnh viễn key
+ * @param {number} keyId
+ */
+export function deleteApiKey(keyId) {
+  return api.delete(`/admin/api-keys/${keyId}`)
+}
+
+/**
+ * Cập nhật quota / thông tin key
+ * @param {number} keyId
+ * @param {object} data - { quota_per_month?, note?, expires_at? }
+ */
+export function updateApiKey(keyId, data) {
+  return api.patch(`/admin/api-keys/${keyId}`, data)
+}
+
+// =========================================
+// ADMIN — USERS
+// =========================================
+
+export function getAdminUsers() {
+  return api.get("/admin/users")
+}
+
+export function setUserRole(userId, role) {
+  return api.patch(`/admin/users/${userId}/role`, { role })
+}
+
+export function setUserBan(userId, banned) {
+  return api.patch(`/admin/users/${userId}/ban`, { banned })
+}
+
+export function adjustUserTokens(userId, delta) {
+  return api.patch(`/admin/users/${userId}/tokens`, { delta })
+}
+
+// =========================================
+// ADMIN — JOBS
+// =========================================
+
+export function getAdminJobs({ limit = 20, offset = 0, status } = {}) {
+  const params = new URLSearchParams({ limit, offset })
+  if (status && status !== "all") params.append("status", status)
+  return api.get(`/admin/jobs?${params}`)
+}
