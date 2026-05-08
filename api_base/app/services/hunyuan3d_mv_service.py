@@ -500,6 +500,13 @@ class Hunyuan3DMvService:
         try:
             self._set_status(db, job_id, "processing")
 
+            # Push ETA ngay khi bắt đầu — trước khi load pipeline
+            await self._push_event_async(job_id, "progress", {
+                "stage": "shape", "step": "start",
+                "message": "🔷 Stage 1 bắt đầu — đang chuẩn bị pipeline...",
+                "eta_seconds": self._get_eta("shape"),
+            })
+
             # Load pipeline nếu chưa có (swap: unload texture trước)
             if self.shape_pipeline is None:
                 self._unload_texture()
@@ -507,13 +514,6 @@ class Hunyuan3DMvService:
                 loop_load = asyncio.get_running_loop()
                 await loop_load.run_in_executor(None, self._load_shape)
                 print("✅ Shape pipeline ready!")
-
-            # SSE: thông báo bắt đầu
-            await self._push_event_async(job_id, "progress", {
-                "stage": "shape", "step": "start",
-                "message": "🔷 Stage 1 bắt đầu — đang decode ảnh...",
-                "eta_seconds": self._get_eta("shape"),
-            })
 
             pil_images = self._decode_images(images_base64, remove_background)
 
@@ -805,6 +805,13 @@ class Hunyuan3DMvService:
         try:
             self._set_status(db, tex_job_id, "processing")
 
+            # Push ETA ngay khi bắt đầu — trước khi load pipeline
+            await self._push_event_async(tex_job_id, "progress", {
+                "stage": "texture", "step": "start",
+                "message": "🎨 Stage 2 bắt đầu — đang chuẩn bị pipeline...",
+                "eta_seconds": self._get_eta("texture"),
+            })
+
             # Load pipeline nếu chưa có (swap: unload shape trước)
             if self.tex_pipeline is None:
                 self._unload_shape()
@@ -815,12 +822,6 @@ class Hunyuan3DMvService:
                     timeout=300  # Bug1 fix: timeout 5 phút cho load model
                 )
                 print("✅ Texture pipeline ready!")
-
-            await self._push_event_async(tex_job_id, "progress", {
-                "stage": "texture", "step": "start",
-                "message": "🎨 Stage 2 bắt đầu — đang decode và xử lý ảnh...",
-                "eta_seconds": self._get_eta("texture"),
-            })
 
             # Decode front image + rembg nếu còn background
             front_image = Image.open(BytesIO(base64.b64decode(front_image_base64))).convert("RGBA")
@@ -978,17 +979,34 @@ class Hunyuan3DMvService:
 
         except (Exception, asyncio.TimeoutError) as e:
             import traceback; traceback.print_exc()
-            job = db.query(ModelJob).filter(ModelJob.job_id == tex_job_id).first()
-            if job:
-                job.status = 'failed'; job.error_message = str(e); db.commit()
             self.task_cache.pop(tex_job_id, None)
             self._unload_texture()
 
-            await self._push_event_async(tex_job_id, "failed", {
-                "stage": "texture", "error": str(e),
-                "message": f"❌ Stage 2 thất bại: {e}",
-            })
-            print(f"❌ [Stage 2] {tex_job_id} failed: {e}")
+            # Kiểm tra nếu file output đã tồn tại → job thực ra thành công dù timeout
+            fallback_path = Path(settings.DOWNLOAD_DIR) / f"{tex_job_id}.glb"
+            job = db.query(ModelJob).filter(ModelJob.job_id == tex_job_id).first()
+
+            if fallback_path.exists():
+                print(f"⚠️  [Stage 2] Timeout nhưng file GLB tồn tại → mark completed")
+                output_url = f"{settings.EXTERNAL_URL}/api/v1/download/{tex_job_id}/textured"
+                if job:
+                    job.status = 'completed'
+                    job.output_model_url = output_url
+                    db.commit()
+                await self._push_event_async(tex_job_id, "completed", {
+                    "stage": "texture",
+                    "output_model_url": output_url,
+                    "message": "✅ Stage 2 xong (recovered after timeout)!",
+                })
+                print(f"✅ [Stage 2] {tex_job_id} recovered → completed")
+            else:
+                if job:
+                    job.status = 'failed'; job.error_message = str(e); db.commit()
+                await self._push_event_async(tex_job_id, "failed", {
+                    "stage": "texture", "error": str(e),
+                    "message": f"❌ Stage 2 thất bại: {e}",
+                })
+                print(f"❌ [Stage 2] {tex_job_id} failed: {e}")
         finally:
             db.close()
             if done_event:
@@ -1323,8 +1341,32 @@ class Hunyuan3DMvService:
             .offset(offset)
             .all()
         )
-        return [
-            {
+        result = []
+        for job in jobs:
+            # Xác định stage dựa vào file tồn tại trên disk
+            white_path = Path(settings.DOWNLOAD_DIR) / f"{job.job_id}.white.glb"
+            tex_path   = Path(settings.DOWNLOAD_DIR) / f"{job.job_id}.glb"
+            if white_path.exists() and not tex_path.exists():
+                job_stage = "shape"   # Stage 1 only
+            elif tex_path.exists():
+                job_stage = "texture" # Stage 2
+            else:
+                job_stage = "shape"   # fallback
+
+            # Nếu faces/vertices null trong DB → parse lại từ file
+            faces = job.faces
+            vertices = job.vertices
+            if (faces is None or vertices is None) and job.status == "completed":
+                glb_file = tex_path if tex_path.exists() else (white_path if white_path.exists() else None)
+                if glb_file:
+                    try:
+                        _, _, parsed_faces, parsed_vertices = self._parse_glb_flags(glb_file)
+                        faces = faces or parsed_faces
+                        vertices = vertices or parsed_vertices
+                    except Exception:
+                        pass
+
+            result.append({
                 "job_id":           job.job_id,
                 "model_name":       job.model_name,
                 "status":           job.status,
@@ -1335,11 +1377,13 @@ class Hunyuan3DMvService:
                 "has_skeleton":     job.has_skeleton,
                 "submission_id":    job.submission_id,
                 "error_message":    job.error_message,
+                "job_stage":        job_stage,
+                "faces":            faces,
+                "vertices":         vertices,
                 "created_at":       job.created_at.isoformat() if job.created_at else None,
                 "updated_at":       job.updated_at.isoformat() if job.updated_at else None,
-            }
-            for job in jobs
-        ]
+            })
+        return result
 
     def get_worker_status(self) -> Dict[str, Any]:
         active = sum(1 for t in self.task_cache.values() if t.get("status") in ("pending", "processing"))

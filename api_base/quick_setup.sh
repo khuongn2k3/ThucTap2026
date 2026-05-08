@@ -12,9 +12,19 @@ MAGENTA='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# ── Dien thong tin Google OAuth cua ban ──
-GOOGLE_CLIENT_ID="YOUR_GOOGLE_CLIENT_ID_HERE"
-GOOGLE_CLIENT_SECRET="YOUR_GOOGLE_CLIENT_SECRET_HERE"
+# ── Nhap Google OAuth credentials ──
+echo -e "${CYAN}🔑 Nhap Google OAuth Client ID (console.cloud.google.com):${NC}"
+read -rp "   GOOGLE_CLIENT_ID: " GOOGLE_CLIENT_ID
+if [ -z "$GOOGLE_CLIENT_ID" ]; then
+    echo -e "${YELLOW}⚠️  Bo qua Google OAuth (co the them sau vao .env)${NC}"
+    GOOGLE_CLIENT_ID=""
+fi
+
+echo -e "${CYAN}🔑 Nhap Google OAuth Client Secret:${NC}"
+read -rp "   GOOGLE_CLIENT_SECRET: " GOOGLE_CLIENT_SECRET
+if [ -z "$GOOGLE_CLIENT_SECRET" ]; then
+    GOOGLE_CLIENT_SECRET=""
+fi
 
 # ── HuggingFace token (lay tai huggingface.co/settings/tokens) ──
 if [ -z "$HF_TOKEN" ] || [ "$HF_TOKEN" = "YOUR_HUGGINGFACE_TOKEN_HERE" ]; then
@@ -99,6 +109,19 @@ else
     ALLOWED_ORIGINS="http://localhost:3000,http://localhost:5173"
     GOOGLE_REDIRECT_URI="http://localhost:8000/api/v1/auth/google/callback"
     EXTERNAL_URL="http://localhost:8000"
+fi
+
+# ── Nhap Frontend URL ──
+echo ""
+echo -e "${CYAN}🌐 Nhap Frontend URL (noi nguoi dung truy cap giao dien):${NC}"
+echo -e "${YELLOW}   Vi du: http://localhost:3000  hoac  https://frontend.trycloudflare.com${NC}"
+read -rp "   FRONTEND_URL (Enter de dung mac dinh http://localhost:3000): " FRONTEND_URL
+if [ -z "$FRONTEND_URL" ]; then
+    FRONTEND_URL="http://localhost:3000"
+    echo -e "${CYAN}ℹ️  Dung mac dinh: http://localhost:3000${NC}"
+else
+    FRONTEND_URL="${FRONTEND_URL%/}"  # bo trailing slash neu co
+    echo -e "${GREEN}✅ Frontend URL: $FRONTEND_URL${NC}"
 fi
 echo ""
 
@@ -323,6 +346,12 @@ else
         && echo -e "${GREEN}✅ basicsr installed${NC}" \
         || echo -e "${YELLOW}⚠️  basicsr install failed, se thu lai cung requirements...${NC}"
 
+    # Fix basicsr: torchvision >= 0.15 da bo functional_tensor, dung functional thay the
+    sed -i 's/from torchvision.transforms.functional_tensor import rgb_to_grayscale/from torchvision.transforms.functional import rgb_to_grayscale/' \
+        venv/lib/python3.10/site-packages/basicsr/data/degradations.py \
+        && echo -e "${GREEN}✅ basicsr/degradations.py patched${NC}" \
+        || echo -e "${YELLOW}⚠️  basicsr patch skip (file khong ton tai hoac da duoc fix)${NC}"
+
     pip install -r requirements-gpu.txt --no-build-isolation
     echo -e "\n${GREEN}✅ Dependencies installed${NC}"
 fi
@@ -394,7 +423,7 @@ else
         # Truong hop tar giai nen khong co wrapper folder
         if [ -d "./hy3dgen" ]; then
             mkdir -p "$MV_DIR"
-            mv ./hy3dgen ./hunyuan3d-dit-v2-mv-fast ./hunyuan3d-paint-v2-0-turbo "$MV_DIR/" 2>/dev/null || true
+            mv ./hy3dgen ./hunyuan3d-dit-v2-mv-fast ./hunyuan3d-paint-v2-0 "$MV_DIR/" 2>/dev/null || true
             echo -e "${GREEN}✅ Da gom vao hunyuan3d-2mv/${NC}"
         else
             echo -e "${RED}❌ Khong tim thay hunyuan3d-2mv/ sau khi giai nen${NC}"
@@ -410,7 +439,7 @@ fi
 echo -e "${YELLOW}Verifying hunyuan3d-2mv structure...${NC}"
 [ -d "$MV_DIR/hy3dgen" ]                           && echo -e "${GREEN}  ✅ hy3dgen/ (package)${NC}"            || echo -e "${RED}  ❌ hy3dgen/ MISSING${NC}"
 [ -d "$MV_DIR/hunyuan3d-dit-v2-mv-fast" ]          && echo -e "${GREEN}  ✅ hunyuan3d-dit-v2-mv-fast/ (shape model)${NC}" || echo -e "${RED}  ❌ hunyuan3d-dit-v2-mv-fast/ MISSING${NC}"
-[ -d "$MV_DIR/hunyuan3d-paint-v2-0-turbo" ]        && echo -e "${GREEN}  ✅ hunyuan3d-paint-v2-0-turbo/ (texture model)${NC}" || echo -e "${RED}  ❌ hunyuan3d-paint-v2-0-turbo/ MISSING${NC}"
+[ -d "$MV_DIR/hunyuan3d-paint-v2-0" ]        && echo -e "${GREEN}  ✅ hunyuan3d-paint-v2-0/ (texture model)${NC}" || echo -e "${RED}  ❌ hunyuan3d-paint-v2-0/ MISSING${NC}"
 
 # ==========================================
 # STEP 7: Setup PYTHONPATH cho hunyuan3d-2mv
@@ -624,6 +653,7 @@ MODELS_CACHE_DIR=./utils/models_cache
 # 🚀 SERVER CONFIG
 # =========================================
 EXTERNAL_URL=$EXTERNAL_URL
+FRONTEND_URL=$FRONTEND_URL
 API_HOST=0.0.0.0
 API_PORT=8000
 DEBUG=False

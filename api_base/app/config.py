@@ -103,6 +103,7 @@ class Settings:
     DEBUG: bool = os.getenv("DEBUG", "True").lower() in ("true", "1", "yes")
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     EXTERNAL_URL: str = os.getenv("EXTERNAL_URL", "http://localhost:8000")
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
     LOAD_MODEL_ON_STARTUP: bool = os.getenv("LOAD_MODEL_ON_STARTUP", "False").lower() in ("true", "1", "yes")
     # =========================================
     # HELPER PROPERTIES

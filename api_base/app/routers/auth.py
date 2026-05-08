@@ -234,3 +234,95 @@ async def auth_info():
             "me": "GET /api/v1/auth/me (requires JWT)"
         }
     }
+
+# =========================================
+# GOOGLE OAUTH
+# =========================================
+
+import httpx
+from fastapi.responses import RedirectResponse
+from app.config import settings
+
+GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
+
+
+@router.get("/google/redirect")
+async def google_redirect():
+    """Chuyển user sang trang đăng nhập Google."""
+    params = {
+        "client_id": settings.GOOGLE_CLIENT_ID,
+        "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+    }
+    query = "&".join(f"{k}={v}" for k, v in params.items())
+    return RedirectResponse(f"{GOOGLE_AUTH_URL}?{query}")
+
+
+@router.get("/google/callback")
+async def google_callback(code: str, db: Session = Depends(get_db)):
+    """Nhận code từ Google, tạo/lấy user, trả về JWT."""
+    # 1. Đổi code lấy access_token
+    async with httpx.AsyncClient() as client:
+        token_res = await client.post(GOOGLE_TOKEN_URL, data={
+            "code": code,
+            "client_id": settings.GOOGLE_CLIENT_ID,
+            "client_secret": settings.GOOGLE_CLIENT_SECRET,
+            "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+            "grant_type": "authorization_code",
+        })
+        token_data = token_res.json()
+
+        if "error" in token_data:
+            raise HTTPException(
+                status_code=400,
+                detail=token_data.get("error_description", "Google OAuth error")
+            )
+
+        # 2. Lấy thông tin user từ Google
+        userinfo_res = await client.get(
+            GOOGLE_USERINFO_URL,
+            headers={"Authorization": f"Bearer {token_data['access_token']}"}
+        )
+        userinfo = userinfo_res.json()
+
+    google_id = userinfo.get("id")
+    email     = userinfo.get("email")
+    name      = userinfo.get("name", email)
+    avatar    = userinfo.get("picture")
+
+    if not email:
+        raise HTTPException(status_code=400, detail="Không lấy được email từ Google")
+
+    # 3. Tìm hoặc tạo user
+    user = db.query(User).filter(User.google_id == google_id).first()
+    if not user:
+        user = db.query(User).filter(User.email == email).first()
+
+    if not user:
+        user = User(
+            name=name,
+            email=email,
+            google_id=google_id,
+            avatar_url=avatar,
+            role="user",
+            tokens=100,
+        )
+        db.add(user)
+    else:
+        # Cập nhật google_id nếu trước đó login bằng email
+        if not user.google_id:
+            user.google_id = google_id
+        if avatar:
+            user.avatar_url = avatar
+
+    db.commit()
+    db.refresh(user)
+
+    # 4. Tạo JWT và redirect về frontend
+    access_token = create_access_token(data={"sub": user.email})
+    frontend_url = settings.FRONTEND_URL
+    return RedirectResponse(f"{frontend_url}/oauth-success?token={access_token}")
