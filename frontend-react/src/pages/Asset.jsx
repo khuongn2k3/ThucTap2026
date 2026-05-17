@@ -3,7 +3,7 @@ import { Link } from "react-router-dom"
 import api from "../services/api"
 import { ModelModal } from "./Home"
 
-const FILTERS = ["All", "Textured", "Untextured", "Rigged"]
+const FILTERS = ["All", "Textured", "Untextured", "White Mesh", "Rigged"]
 
 export default function History() {
   const [tab, setTab]               = useState("assets")   // "assets" | "collected"
@@ -35,10 +35,15 @@ export default function History() {
     }
     // Không có submission_id → dùng trực tiếp dữ liệu job
     if (job.output_model_url || job.input_image_url) {
+      // Stage 1 white mesh: dùng URL /white thay vì output_model_url
+      const isWhite = job.job_stage === "shape"
+      const modelUrl = isWhite
+        ? `${import.meta.env.VITE_API_URL}/download/${job.job_id}/white`
+        : (job.output_model_url ?? null)
       setSelectedModel({
         id: job.job_id,
-        model_name: job.model_name || job.job_id?.slice(0, 12) || "Model",
-        model_url: job.output_model_url ?? null,
+        model_name: job.model_name || (isWhite ? "White Mesh" : "Model") + " · " + (job.job_id?.slice(0, 8) || ""),
+        model_url: modelUrl,
         image_url: job.input_image_url ?? job.thumbnail_url ?? null,
         thumbnail_url: job.thumbnail_url ?? job.input_image_url ?? null,
         has_texture: job.has_texture ?? false,
@@ -80,11 +85,15 @@ export default function History() {
   }, [])
 
   // Filter jobs
+  // Stage 1 = white mesh: output_model_url chứa "/white" hoặc has_texture=false và không có submission_id
+  const isWhiteMesh = (j) => j.job_stage === "shape"
+
   const filteredJobs = jobs.filter(j => {
     if (j.status !== "completed") return false
+    if (filter === "White Mesh") return isWhiteMesh(j)
     if (filter === "All") return true
     if (filter === "Textured") return j.has_texture === true
-    if (filter === "Untextured") return j.has_texture === false
+    if (filter === "Untextured") return !isWhiteMesh(j) && j.has_texture === false
     if (filter === "Rigged") return j.has_skeleton === true
     return true
   })
@@ -472,4 +481,3 @@ function SkeletonGrid() {
     </>
   )
 }
-

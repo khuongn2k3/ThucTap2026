@@ -149,20 +149,6 @@ export default function Navbar() {
                       Personal Info
                     </button>
 
-                    {/* Dashboard */}
-                    <Link to="/dashboard" onClick={() => setOpen(false)} className="nb-item" style={{
-                      display: "flex", alignItems: "center", gap: 9,
-                      padding: "9px 14px", fontSize: 13, color: "#bbb",
-                      textDecoration: "none", transition: "all 0.15s",
-                    }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
-                        <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
-                      </svg>
-                      Dashboard
-                    </Link>
-
-                    <div style={{ height: 1, background: "#1a1a1a", margin: "4px 0" }} />
 
                     {/* Logout */}
                     <button className="nb-item nb-logout" onClick={handleLogout} style={{

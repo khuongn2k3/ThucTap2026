@@ -165,7 +165,7 @@ function Slot({ label, file, onChange, disabled }) {
         <input ref={ref} type="file" accept="image/*" style={{ display: "none" }}
           onChange={e => {
             const f = e.target.files[0]
-            if (f && f.size > 20 * 1024 * 1024) { alert("Ảnh phải nhỏ hơn 20MB"); e.target.value = ""; return }
+            if (f && f.size > 20 * 1024 * 1024) { alert("Image must be smaller than 20MB"); e.target.value = ""; return }
             onChange(f || null)
           }} disabled={disabled} />
 
@@ -276,7 +276,7 @@ export default function Convert3D() {
   const [withTexture, setWithTexture]   = useState(true)
   const [texture4k, setTexture4k]       = useState(false)
   const [quality, setQuality]           = useState("standard")
-  const [polycount, setPolycount]       = useState(1000000)
+  const [polycount, setPolycount]       = useState(700000)
   const [guidanceScale, setGuidanceScale] = useState(5.0)
   const [step, setStep]             = useState(STEPS.IDLE)
   const [shapeJobId,  setShapeJobId]    = useState(null)
@@ -290,6 +290,7 @@ export default function Convert3D() {
   const [meshFaces,    setMeshFaces]    = useState(null)
   const [meshVertices, setMeshVertices] = useState(null)
   const [uploadedExt,  setUploadedExt]  = useState(null)
+  const [resolvedExt,  setResolvedExt]  = useState(null)  // Fix 3: ext thực tế sau detect magic bytes
   const [resolvedSrc,  setResolvedSrc]  = useState(null)  // blob URL dùng cho ModelViewer3D
   const resolvedBlobRef = useRef(null)                     // để revoke khi đổi model
   const [baseView,     setBaseView]     = useState("default")
@@ -311,8 +312,10 @@ export default function Convert3D() {
   const [collected, setCollected]   = useState(false)
   const [showShare, setShowShare]   = useState(false)
   const [submissionId, setSubmissionId] = useState(null)
+  const [refreshCount, setRefreshCount] = useState(0)
   const [collectedModels, setCollectedModels] = useState([])
   const [elapsedSec, setElapsedSec] = useState(0)
+  const [showSuccess, setShowSuccess] = useState(false)
   const [etaS1, setEtaS1] = useState(90)   // ETA Stage 1 từ backend (giây)
   const [etaS2, setEtaS2] = useState(90)   // ETA Stage 2 từ backend (giây)
   const stageStartRef = useRef(null)
@@ -347,12 +350,14 @@ export default function Convert3D() {
     if (!viewerSrc) {
       setResolvedSrc(null)
       setMeshFaces(null); setMeshVertices(null); setTexResolution(null)
+      setResolvedExt(null)  // Fix 3: reset ext khi không còn model
       return
     }
 
     // Nếu đã là blob URL (model upload local) → dùng thẳng, không fetch lại
     if (viewerSrc.startsWith("blob:")) {
       setResolvedSrc(viewerSrc)
+      return  // Fix 1: tránh fall-through xuống cache-check và fetch bên dưới
     }
 
     // ── Cache hit: instant, không fetch ────────────────────────────────────
@@ -368,12 +373,14 @@ export default function Convert3D() {
     const url = viewerSrc
     const rawExt = url.split("?")[0].split(".").pop().toLowerCase()
     const ext = url.startsWith("blob:") ? (uploadedExt || rawExt) : rawExt
+    let cancelled = false  // Fix 2: cờ huỷ fetch khi viewerSrc đổi trước khi fetch xong
     fetch(url)
       .then(r => {
         const ct = r.headers.get("content-type") || ""
         return r.arrayBuffer().then(buf => ({ buf, ct }))
       })
       .then(({ buf, ct }) => {
+        if (cancelled) return  // Fix 2: bỏ qua nếu đã bị cancel (viewerSrc đổi)
         // Tạo blob URL từ buffer → ModelViewer3D load local, không fetch lại
         if (!viewerSrc.startsWith("blob:")) {
           const modelBlob = new Blob([buf], { type: "model/gltf-binary" })
@@ -387,10 +394,11 @@ export default function Convert3D() {
         // Cần thiết vì backend trả URL không có đuôi (.glb): /download/{id}/white|textured
         const isGlbMagic = buf.byteLength >= 4 && new DataView(buf).getUint32(0, true) === 0x46546C67
         const isGlbCT = ct.includes("gltf-binary")
-        const resolvedExt = isGlbMagic || isGlbCT ? "glb"
+        const detectedExt = isGlbMagic || isGlbCT ? "glb"
           : (ct.includes("wavefront") ? "obj" : ext)
+        setResolvedExt(detectedExt)  // Fix 3: expose ext thực tế cho ModelViewer3D
 
-        if (resolvedExt === "glb") {
+        if (detectedExt === "glb") {
           const view = new DataView(buf)
           if (view.getUint32(0, true) !== 0x46546C67) return
           const jsonLen = view.getUint32(12, true)
@@ -432,7 +440,7 @@ export default function Convert3D() {
               img.src = blobUrl
             }
           }
-        } else if (resolvedExt === "obj") {
+        } else if (detectedExt === "obj") {
           const text = new TextDecoder().decode(buf)
           let vCount = 0, fTris = 0
           for (const line of text.split("\n")) {
@@ -442,7 +450,7 @@ export default function Convert3D() {
           }
           if (vCount > 0) setMeshVertices(vCount)
           if (fTris > 0) setMeshFaces(fTris)
-        } else if (resolvedExt === "stl") {
+        } else if (detectedExt === "stl") {
           const isAscii = new TextDecoder("utf-8",{fatal:false}).decode(buf.slice(0,80)).trimStart().toLowerCase().startsWith("solid") && buf.byteLength < 500_000
           if (isAscii) {
             const fc = (new TextDecoder().decode(buf).match(/^\s*facet\s+normal/gm)||[]).length
@@ -456,6 +464,7 @@ export default function Convert3D() {
       .catch(() => {})
 
     return () => {
+      cancelled = true  // Fix 2: huỷ fetch đang chờ nếu effect re-run
       if (resolvedBlobRef.current) {
         URL.revokeObjectURL(resolvedBlobRef.current)
         resolvedBlobRef.current = null
@@ -463,6 +472,26 @@ export default function Convert3D() {
     }
   }, [viewerSrc])
   const isRunning = [STEPS.S1_LOADING,STEPS.S1_POLLING,STEPS.S2_LOADING,STEPS.S2_POLLING].includes(step)
+
+  // ── Persist active job → sessionStorage (survive reload) ─────────────────
+  const JOB_KEY = "convert3d_active_job"
+  useEffect(() => {
+    if ([STEPS.S1_POLLING, STEPS.S2_POLLING].includes(step)) {
+      sessionStorage.setItem(JOB_KEY, JSON.stringify({
+        step, shapeJobId, activeJobId, withTexture, texture4k,
+      }))
+    } else {
+      sessionStorage.removeItem(JOB_KEY)
+    }
+  }, [step, shapeJobId, activeJobId, withTexture, texture4k])
+
+  // ── Success toast — hiện khi step chuyển sang DONE ──────────────────────
+  useEffect(() => {
+    if (step !== STEPS.DONE) return
+    setShowSuccess(true)
+    const t = setTimeout(() => setShowSuccess(false), 3500)
+    return () => clearTimeout(t)
+  }, [step])
 
   // ── Elapsed timer ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -538,6 +567,7 @@ export default function Convert3D() {
 
   const onErr = useCallback((msg) => {
     console.error("[Convert3D ERROR]", msg)
+    sessionStorage.removeItem("convert3d_active_job")
     stopSSE(); setError(msg); setStep(STEPS.ERROR)
   }, [stopSSE])
 
@@ -550,6 +580,7 @@ export default function Convert3D() {
     const es = openJobSSE(jid, {
       onProgress: (d) => {
         if (d.step === "start" && d.eta_seconds) {
+	  console.log("ETA received:", d.stage, d.eta_seconds)
           if (d.stage === "shape")   setEtaS1(d.eta_seconds)
           if (d.stage === "texture") setEtaS2(d.eta_seconds)
         }
@@ -557,15 +588,63 @@ export default function Convert3D() {
       },
       onCompleted: (d) => {
         stopSSE()
-        onDone(d.output_model_url, d.metrics, d.submission_id)
+        onDone(d?.output_model_url, d?.metrics, d?.submission_id)
       },
       onFailed: (d) => {
         console.error("[Convert3D SSE failed]", JSON.stringify(d))
-        onErr(d.error || d.message || "Job failed")
+        onErr(d?.error || d?.message || "Job failed")
       },
     })
     sseRef.current = es
   }, [onErr, stopSSE])
+
+  // ── Restore job từ sessionStorage sau reload ──────────────────────────────
+  useEffect(() => {
+    const raw = sessionStorage.getItem("convert3d_active_job")
+    if (!raw) return
+    let saved
+    try { saved = JSON.parse(raw) } catch { sessionStorage.removeItem("convert3d_active_job"); return }
+
+    const { step: sv, shapeJobId: sjid, activeJobId: ajid, withTexture: wt, texture4k: t4k } = saved
+
+    if (sv === STEPS.S1_POLLING && sjid) {
+      setStep(STEPS.S1_POLLING)
+      setShapeJobId(sjid); setActiveJobId(sjid)
+      setWithTexture(wt ?? true); setTexture4k(t4k ?? false)
+      stageStartRef.current = Date.now()
+      doSSE(sjid, (url, m, sid) => {
+        setWhiteUrl(url); setCurrentJobId(sjid)
+        setSubmissionId(sid ?? null); setCollected(false)
+        setRefreshCount(c => c + 1)
+        if (wt ?? true) {
+          // Server đã lưu ảnh từ Stage 1 → gọi JSON endpoint, không cần File
+          setStep(STEPS.S1_DONE)
+          runStage2FromJobId(sjid, t4k ?? false)
+        } else {
+          setMetrics(m)
+          setStep(STEPS.DONE)
+          sessionStorage.removeItem("convert3d_active_job")
+        }
+      })
+
+    } else if (sv === STEPS.S2_POLLING && ajid) {
+      // Stage 2 đang chạy → re-subscribe bình thường, không cần file ảnh
+      setStep(STEPS.S2_POLLING)
+      setShapeJobId(sjid); setActiveJobId(ajid)
+      setWithTexture(wt ?? true); setTexture4k(t4k ?? false)
+      stageStartRef.current = Date.now()
+      doSSE(ajid, (url, m, sid) => {
+        setTexUrl(url); setMetrics(m); setCurrentJobId(ajid)
+        setSubmissionId(sid ?? null); setCollected(false)
+        setStep(STEPS.DONE); setRefreshCount(c => c + 1)
+        sessionStorage.removeItem("convert3d_active_job")
+      })
+
+    } else {
+      sessionStorage.removeItem("convert3d_active_job")
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // mount only — doSSE stable via useCallback
 
   const runStage2 = useCallback(async (sjid) => {
     if (!front) return
@@ -576,19 +655,46 @@ export default function Convert3D() {
       fd.append("front", front)
       fd.append("texture_4k", texture4k ? "true" : "false")
       const r = await generateTextureMv(fd)
+      if (r.data.eta_texture) setEtaS2(r.data.eta_texture)
       setActiveJobId(r.data.job_id)
       setStep(STEPS.S2_POLLING)
       doSSE(r.data.job_id, (url, m, sid) => {
-        prefetchModel(url)  // bắt đầu download ngầm ngay khi completed
+        //prefetchModel(url)  // bắt đầu download ngầm ngay khi completed
         setTexUrl(url); setMetrics(m); setActiveJobId(null); setStep(STEPS.DONE)
         setCurrentJobId(r.data.job_id)
         setSubmissionId(sid ?? null); setCollected(false)
+        setRefreshCount(c => c + 1)
       })
     } catch (e) {
       console.error("[Convert3D Stage 2 catch]", e?.response?.data || e?.message || e)
       onErr(e.response?.data?.detail || "Stage 2 error")
     }
   }, [front, doSSE, onErr, texture4k])
+
+  // ── Stage 2 resume — gọi JSON endpoint, không cần File object ────────────
+  // Dùng khi S1_POLLING resume sau reload: server đã lưu ảnh từ Stage 1
+  const runStage2FromJobId = useCallback(async (sjid, t4k) => {
+    setStep(STEPS.S2_LOADING)
+    try {
+      const r = await api.post("/generate-texture-mv", {
+        shape_job_id: sjid,
+        texture_4k: !!t4k,
+      })
+      if (r.data.eta_texture) setEtaS2(r.data.eta_texture)
+      setActiveJobId(r.data.job_id)
+      setStep(STEPS.S2_POLLING)
+      doSSE(r.data.job_id, (url, m, sid) => {
+        setTexUrl(url); setMetrics(m); setActiveJobId(null)
+        setCurrentJobId(r.data.job_id)
+        setSubmissionId(sid ?? null); setCollected(false)
+        setStep(STEPS.DONE); setRefreshCount(c => c + 1)
+        sessionStorage.removeItem("convert3d_active_job")
+      })
+    } catch (e) {
+      console.error("[Convert3D Stage 2 resume catch]", e?.response?.data || e?.message || e)
+      onErr(e.response?.data?.detail || "Stage 2 error (resume)")
+    }
+  }, [doSSE, onErr])
 
   const handleGenerate = async () => {
     if (!front) return
@@ -608,9 +714,11 @@ export default function Convert3D() {
       fd.append("guidance_scale", guidanceScale)
       const r = await generateShapeMv(fd)
       const jid = r.data.job_id
+      if (r.data.eta_shape)   setEtaS1(r.data.eta_shape)
+      if (r.data.eta_texture) setEtaS2(r.data.eta_texture)
       setShapeJobId(jid); setActiveJobId(jid); setStep(STEPS.S1_POLLING)
       doSSE(jid, (url, m, sid) => {
-        prefetchModel(url)  // bắt đầu download ngầm ngay khi completed
+        //prefetchModel(url)  // bắt đầu download ngầm ngay khi completed
         setWhiteUrl(url); setActiveJobId(null)
         setSubmissionId(sid ?? null); setCollected(false)
         if (withTexture) {
@@ -622,6 +730,7 @@ export default function Convert3D() {
           setMetrics(m)
           setCurrentJobId(jid)
           setStep(STEPS.DONE)
+          setRefreshCount(c => c + 1)
         }
       })
     } catch (e) {
@@ -632,6 +741,7 @@ export default function Convert3D() {
 
   const handleReset = () => {
     stopSSE()
+    sessionStorage.removeItem("convert3d_active_job")
     clearInterval(timerRef.current)
     stageStartRef.current = null
     setElapsedSec(0)
@@ -641,6 +751,7 @@ export default function Convert3D() {
     setPolycount(null)
     setGuidanceScale(5.0)
     setTexture4k(false)
+    setReloadWarning(null)
   }
 
   // ── Progress & timer helpers ─────────────────────────────────────────────
@@ -676,12 +787,12 @@ export default function Convert3D() {
 
   // Status label
   const statusLabel = {
-    [STEPS.S1_LOADING]: "Đang gửi ảnh...",
-    [STEPS.S1_POLLING]: "Stage 1 — Đang tạo mesh...",
-    [STEPS.S1_DONE]:    "Stage 1 hoàn tất",
-    [STEPS.S2_LOADING]: "Đang bắt đầu texture...",
-    [STEPS.S2_POLLING]: "Stage 2 — Đang sơn texture...",
-    [STEPS.DONE]:       "Hoàn tất",
+    [STEPS.S1_LOADING]: "Uploading image...",
+    [STEPS.S1_POLLING]: "Stage 1 — Generating mesh...",
+    [STEPS.S1_DONE]:    "Stage 1 complete",
+    [STEPS.S2_LOADING]: "Starting texture...",
+    [STEPS.S2_POLLING]: "Stage 2 — Applying texture...",
+    [STEPS.DONE]:       "Done",
     [STEPS.ERROR]:      error,
   }[step]
 
@@ -791,7 +902,7 @@ export default function Convert3D() {
                 padding: "6px 0" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                   <span style={{ fontSize: 11, color: "#aaa" }}>4K Texture</span>
-                  <Tooltip text="Upscale texture lên 4096px bằng Real-ESRGAN. Tốn thêm ~2-5 phút." />
+                  <Tooltip text="Upscale texture to 4096px using Real-ESRGAN. Takes an extra ~2–5 minutes." />
                 </div>
                 <Toggle on={texture4k} onChange={setTexture4k} disabled={isRunning} />
               </div>
@@ -807,21 +918,21 @@ export default function Convert3D() {
                 marginBottom: 6 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                   <span style={{ fontSize: 11, color: "#aaa" }}>Polycount</span>
-                  <Tooltip text="Giảm số faces sau generate. Auto = giữ nguyên output pipeline." />
+                  <Tooltip text="Reduce face count after generation. Auto = keep pipeline default." />
                 </div>
                 <span style={{ fontSize: 11, color: "#60a5fa",
                   fontFamily: "monospace", fontWeight: 600 }}>
                   {polycount.toLocaleString()}
                 </span>
               </div>
-              <input type="range" min={1000} max={1000000} step={1000}
+              <input type="range" min={1000} max={700000} step={1000}
                 value={polycount} disabled={isRunning}
                 onChange={e => setPolycount(parseInt(e.target.value))}
                 style={{ width: "100%", accentColor: "#3b82f6", opacity: isRunning ? 0.4 : 1 }}
               />
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 3 }}>
                 <span style={{ fontSize: 9, color: "#444" }}>1K</span>
-                <span style={{ fontSize: 9, color: "#555" }}>1M</span>
+                <span style={{ fontSize: 9, color: "#555" }}>700k</span>
               </div>
             </div>
 
@@ -831,7 +942,7 @@ export default function Convert3D() {
                 marginBottom: 6 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                   <span style={{ fontSize: 11, color: "#aaa" }}>Guidance Scale</span>
-                  <Tooltip text={"Mức độ AI bám sát ảnh input.\nThấp = tự do hơn. Cao = bám sát ảnh."} />
+                  <Tooltip text={"How closely the AI follows the input image.\nLow = more creative. High = more faithful."} />
                 </div>
                 <span style={{ fontSize: 11, color: "#60a5fa", fontFamily: "monospace", fontWeight: 600 }}>
                   {guidanceScale.toFixed(1)}
@@ -887,18 +998,18 @@ export default function Convert3D() {
               background: "#3f1515", border: "1px solid #6b2020",
               fontSize: 11, color: "#f87171",
             }}>
-              ❌ Đã xảy ra lỗi, vui lòng thử lại sau.
+              An error occurred, please try again.
             </div>
           )}
 
           {/* Generate / action button */}
           {(step === STEPS.IDLE || step === STEPS.ERROR) && (
-            <button onClick={handleGenerate} disabled={!front}
+            <button onClick={handleGenerate} disabled={!front || isRunning}
               style={{
                 width: "100%", padding: "11px 0", borderRadius: 10, border: "none",
-                background: front ? "#f59e0b" : "#2a2a1a",
-                color: front ? "#1a1000" : "#555",
-                fontSize: 13, fontWeight: 700, cursor: front ? "pointer" : "not-allowed",
+                background: front && !isRunning ? "#f59e0b" : "#2a2a1a",
+                color: front && !isRunning ? "#1a1000" : "#555",
+                fontSize: 13, fontWeight: 700, cursor: front && !isRunning ? "pointer" : "not-allowed",
                 display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
                 transition: "background .15s",
               }}
@@ -932,20 +1043,20 @@ export default function Convert3D() {
                   ⬇ White Mesh
                 </a>
               )}
-              <button onClick={handleGenerate} disabled={!front}
+              <button onClick={handleGenerate} disabled={!front || isRunning}
                 style={{
                   width: "100%", padding: "11px 0", borderRadius: 10, border: "none",
-                  background: front ? "#f59e0b" : "#2a2a1a",
-                  color: front ? "#1a1000" : "#555",
-                  fontSize: 13, fontWeight: 700, cursor: front ? "pointer" : "not-allowed",
+                  background: front && !isRunning ? "#f59e0b" : "#2a2a1a",
+                  color: front && !isRunning ? "#1a1000" : "#555",
+                  fontSize: 13, fontWeight: 700, cursor: front && !isRunning ? "pointer" : "not-allowed",
                   display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
                   transition: "background .15s",
                 }}
               >
                 Generate Model
                 <span style={{
-                  background: front ? "#dc2626" : "#3a3a30",
-                  color: front ? "#fff" : "#555",
+                  background: front && !isRunning ? "#dc2626" : "#3a3a30",
+                  color: front && !isRunning ? "#fff" : "#555",
                   borderRadius: "50%", width: 20, height: 20, fontSize: 10,
                   fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center",
                 }}>
@@ -986,9 +1097,55 @@ export default function Convert3D() {
       {/* ══ CENTER VIEWPORT ═══════════════════════════════════════════════ */}
       <main style={{ flex: 1, position: "relative", overflow: "hidden", background: "radial-gradient(ellipse at 50% 40%, #606060 0%, #505050 15%, #404040 28%, #303030 42%, #222222 57%, #171717 72%, #101010 86%, #0c0c0c 100%)" }}>
 
+        {/* Success toast */}
+        <style>{`
+          @keyframes toastIn {
+            from { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+            to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+          }
+          @keyframes toastOut {
+            from { opacity: 1; }
+            to   { opacity: 0; }
+          }
+        `}</style>
+        {showSuccess && (
+          <div style={{
+            position: "absolute", top: 20, left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 50,
+            display: "flex", alignItems: "center", gap: 8,
+            padding: "9px 16px",
+            borderRadius: 10,
+            background: "rgba(20,20,26,0.92)",
+            border: "1px solid #2a4a2a",
+            backdropFilter: "blur(8px)",
+            boxShadow: "0 4px 24px rgba(0,0,0,0.5)",
+            animation: "toastIn 0.25s ease forwards",
+            whiteSpace: "nowrap",
+          }}>
+            {/* dot */}
+            <div style={{
+              width: 7, height: 7, borderRadius: "50%",
+              background: "#4ade80",
+              boxShadow: "0 0 6px #4ade8088",
+              flexShrink: 0,
+            }} />
+            <span style={{ fontSize: 12, fontWeight: 500, color: "#d0d0d0" }}>
+              Model generated successfully
+            </span>
+            <span style={{ fontSize: 11, color: "#555", marginLeft: 4 }}>
+              — ready to export
+            </span>
+            <button
+              onClick={() => setShowSuccess(false)}
+              style={{ background: "none", border: "none", color: "#444", cursor: "pointer", fontSize: 12, marginLeft: 6, padding: 0, lineHeight: 1 }}
+            >✕</button>
+          </div>
+        )}
         {resolvedSrc ? (
           <ModelViewer3D
             src={resolvedSrc}
+            fileExt={resolvedExt}
             style={renderStyle}
             autoRotate={autoRot}
             wireframe={wire}
@@ -1015,7 +1172,7 @@ export default function Convert3D() {
               <path d="M10 28l30 18 30-18M40 46v18"/>
             </svg>
             <p style={{ fontSize: 12, color: "#333" }}>
-              Upload ảnh và nhấn Generate để xem mô hình 3D
+              Upload an image and click Generate to preview the 3D model
             </p>
           </div>
         )}
@@ -1203,7 +1360,7 @@ export default function Convert3D() {
               style={{ background: "none", border: "none", cursor: submissionId ? "pointer" : "not-allowed", fontSize: 16, color: showShare ? "#7c6ef5" : "#555", opacity: submissionId ? 1 : 0.3, transition: "color 0.2s, opacity 0.2s" }}
             >↗</button>
 
-            <button onClick={() => setAutoRot(p => !p)} title={autoRot ? "Dừng xoay" : "Xoay tự động"}
+            <button onClick={() => setAutoRot(p => !p)} title={autoRot ? "Stop rotation" : "Auto rotate"}
               style={{ background: autoRot ? "rgba(59,130,246,0.15)" : "rgba(255,255,255,0.05)", border: `1px solid ${autoRot ? "rgba(59,130,246,0.4)" : "#2a2a2a"}`, borderRadius: 99, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, padding: "4px 12px", transition: "all 0.2s" }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={autoRot ? "#60a5fa" : "#555"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 {autoRot
@@ -1252,7 +1409,7 @@ export default function Convert3D() {
         }}
         isGenerating={isRunning}
         countdown={estRemaining}
-        refreshTrigger={step === STEPS.DONE ? submissionId : null}
+        refreshTrigger={refreshCount}
         onSelectModel={({ model_url, id, jobId, isCollected, ext }) => {
           setTexUrl(model_url)
           setWhiteUrl(null)
@@ -1378,7 +1535,7 @@ function RightPanel({ viewerSrc, onSelectModel, collectedModels, setCollectedMod
     if (!file) return
     const ext = file.name.split(".").pop().toLowerCase()
     if (!["glb","stl"].includes(ext)) return
-    if (file.size > 35 * 1024 * 1024) { alert("File quá lớn, tối đa 35MB"); return }
+    if (file.size > 35 * 1024 * 1024) { alert("File too large, maximum 35MB"); return }
     try {
       const { default: api } = await import("../services/api")
       const fd = new FormData()
@@ -1391,7 +1548,7 @@ function RightPanel({ viewerSrc, onSelectModel, collectedModels, setCollectedMod
         output_model_url, has_texture: false, has_skeleton: false,
         created_at: new Date().toISOString()
       }, ...prev])
-    } catch { alert("Upload thất bại") }
+    } catch { alert("Upload failed") }
   }
   // Track uncollected IDs locally — card stays visible until tab switch / reload
   const [uncollectedIds, setUncollectedIds] = useState(new Set())
@@ -1754,7 +1911,7 @@ function RightPanel({ viewerSrc, onSelectModel, collectedModels, setCollectedMod
                               }
                             } catch {}
                           }}
-                          title={uncollectedIds.has(model.id) ? "Collect lại" : "Bỏ khỏi collection"}
+                          title={uncollectedIds.has(model.id) ? "Add back to collection" : "Remove from collection"}
                           style={{ position: "absolute", top: 4, right: 4, background: "none", border: "none", fontSize: 14, color: uncollectedIds.has(model.id) ? "#444" : "#f5c842", cursor: "pointer", padding: 0, lineHeight: 1, opacity: 0, transition: "opacity 0.15s, color 0.2s" }}
                         >★</button>
                       </div>
@@ -2045,7 +2202,7 @@ function ConvertExportModal({ modelUrl, modelName, submissionId, jobId, hasSkele
         <div style={{ marginBottom:16 }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
             <span style={{ fontSize:12, color:"#555" }}>Format</span>
-            <span style={{ fontSize:11, color:"#444" }}>Gốc: <span style={{ color:"#888" }}>.{srcFormat.toUpperCase()}</span></span>
+            <span style={{ fontSize:11, color:"#444" }}>Source: <span style={{ color:"#888" }}>.{srcFormat.toUpperCase()}</span></span>
           </div>
           <div style={{ position:"relative" }}>
             <select value={format} onChange={e => setFormat(e.target.value)}
@@ -2067,7 +2224,7 @@ function ConvertExportModal({ modelUrl, modelName, submissionId, jobId, hasSkele
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
             <span style={{ fontSize:12, color:"#555" }}>Texture Resolution</span>
             {texResolution && (
-              <span style={{ fontSize:11, color:"#7c6ef5" }}>Gốc: {texResolution}</span>
+              <span style={{ fontSize:11, color:"#7c6ef5" }}>Source: {texResolution}</span>
             )}
           </div>
           <div style={{ display:"flex", gap:8 }}>
@@ -2078,7 +2235,7 @@ function ConvertExportModal({ modelUrl, modelName, submissionId, jobId, hasSkele
                 <button key={r}
                   onClick={() => !tooHigh && setTexRes(r)}
                   disabled={tooHigh}
-                  title={tooHigh ? `Model chỉ có ${texResolution}` : r}
+                  title={tooHigh ? `Model only has ${texResolution}` : r}
                   style={{ flex:1, padding:"8px 0", fontSize:12,
                     border:`1px solid ${active?"#7c6ef5":"#222"}`,
                     borderRadius:8,
@@ -2100,7 +2257,7 @@ function ConvertExportModal({ modelUrl, modelName, submissionId, jobId, hasSkele
           )}
           {texRes !== texResolution && texResolution && submissionId && (
             <div style={{ fontSize:11, color:"#888", marginTop:6 }}>
-              ↓ Sẽ downscale từ {texResolution} xuống {texRes}
+              Will downscale from ${texResolution} to ${texRes}
             </div>
           )}
         </div>
@@ -2129,7 +2286,7 @@ function ConvertExportModal({ modelUrl, modelName, submissionId, jobId, hasSkele
         <button onClick={handleExport} disabled={downloading}
           style={{ width:"100%", padding:"12px 0", borderRadius:99, background:downloading?"#2a2a2a":"linear-gradient(135deg,#f5c842,#e8a800)", color:downloading?"#555":"#111", fontSize:14, fontWeight:600, border:"none", cursor:downloading?"not-allowed":"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8, fontFamily:"'DM Sans',sans-serif" }}
         >
-          <span>⬇</span> {downloading ? "Đang tải..." : `Export .${(submissionId || jobId) ? downloadExt.toUpperCase() : srcFormat.toUpperCase()}`}
+          <span>⬇</span> {downloading ? "Downloading..." : `Export .${(submissionId || jobId) ? downloadExt.toUpperCase() : srcFormat.toUpperCase()}`}
         </button>
       </div>
     </div>

@@ -10,9 +10,9 @@ export default function OAuthSuccess() {
 
     if (token) {
       localStorage.setItem("token", token)
-      navigate("/dashboard")
+      window.location.href = "/"
     } else {
-      navigate("/login")
+      navigate("/")
     }
   }, [])
 

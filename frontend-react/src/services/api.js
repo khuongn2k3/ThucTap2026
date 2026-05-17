@@ -173,12 +173,26 @@ export function openJobSSE(jobId, { onProgress, onCompleted, onFailed, onHeartbe
     if (onCompleted) es.addEventListener("completed", (e) => {
       closed = true
       es.close() // đóng ngay để tránh onerror fire sau khi server đóng connection
-      try { onCompleted(JSON.parse(e.data)) } catch { }
+      // Parse JSON tách riêng: nếu parse thất bại (e.g. data rỗng) vẫn gọi callback với {}
+      // để UI có thể transition sang DONE thay vì bị treo mãi ở S2_POLLING
+      let parsed = {}
+      try { parsed = JSON.parse(e.data) } catch (parseErr) {
+        console.warn("[SSE] completed — could not parse event data, falling back to {}", e.data, parseErr)
+      }
+      try { onCompleted(parsed) } catch (cbErr) {
+        console.error("[SSE] onCompleted callback threw:", cbErr)
+      }
     })
     if (onFailed) es.addEventListener("failed", (e) => {
       closed = true
       es.close() // đóng ngay để tránh onerror fire sau khi server đóng connection
-      try { onFailed(JSON.parse(e.data)) } catch { }
+      let parsed = {}
+      try { parsed = JSON.parse(e.data) } catch (parseErr) {
+        console.warn("[SSE] failed — could not parse event data", e.data, parseErr)
+      }
+      try { onFailed(parsed) } catch (cbErr) {
+        console.error("[SSE] onFailed callback threw:", cbErr)
+      }
     })
     if (onHeartbeat) es.addEventListener("heartbeat", (e) => {
       try { onHeartbeat(JSON.parse(e.data)) } catch { }

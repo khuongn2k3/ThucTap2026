@@ -347,7 +347,9 @@ async def generate_texture_mv(
     **Thời gian:** ~3-8 phút tùy server/GPU.
     """
     job = db.query(ModelJob).filter(ModelJob.job_id == request.shape_job_id)
-    if auth.user_id is not None:
+    # JWT: enforce ownership — chỉ cho xem job của chính mình
+    # API Key: không filter user_id vì key có thể không gắn owner (user_id=None)
+    if auth.type == "jwt" and auth.user_id is not None:
         job = job.filter(ModelJob.user_id == auth.user_id)
     job = job.first()
     if not job:
@@ -418,7 +420,8 @@ async def generate_texture_mv_upload(
 
     # Load left/right/back từ DB (đã lưu ở Stage 1)
     job = db.query(ModelJob).filter(ModelJob.job_id == shape_job_id)
-    if auth.user_id is not None:
+    # JWT: enforce ownership; API Key: không filter user_id (key có thể không có owner)
+    if auth.type == "jwt" and auth.user_id is not None:
         job = job.filter(ModelJob.user_id == auth.user_id)
     job = job.first()
     images_base64: Dict[str, str] = {}
@@ -605,121 +608,9 @@ async def generate_full_mv(
     )
 
 
-@router.post("/generate-full-mv/upload", response_model=FullPipelineResponse)
-async def generate_full_mv_upload(
-    front: UploadFile = File(..., description="Ảnh góc trước (bắt buộc)"),
-    left:  Optional[UploadFile] = File(None),
-    back:  Optional[UploadFile] = File(None),
-    right: Optional[UploadFile] = File(None),
-    model_name: Optional[str] = Form(None),
-    remove_background: bool = Form(True),
-    num_inference_steps: int = Form(50),
-    octree_resolution:   int = Form(380),
-    polycount: Optional[int] = Form(None),
-    guidance_scale: float = Form(5.0),
-    texture_4k: bool = Form(False),
-    db: Session = Depends(get_db),
-    auth: AuthContext = Depends(get_auth_context),
-):
-    """
-    ## Full Pipeline — Upload file trực tiếp (Stage 1 + Stage 2)
-
-    ```bash
-    curl -X POST ".../api/v1/generate-full-mv/upload" \\
-         -H "Authorization: Bearer TOKEN" \\
-         -F "front=@front.png" \\
-         -F "left=@left.png" \\
-         -F "texture_4k=false"
-    ```
-    """
-    images_base64: Dict[str, str] = {}
-    for view, upload in {"front": front, "left": left, "back": back, "right": right}.items():
-        if upload is None:
-            continue
-        try:
-            contents = await upload.read()
-            Image.open(BytesIO(contents))
-            images_base64[view] = base64.b64encode(contents).decode()
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"File '{view}' không hợp lệ: {e}")
-
-    total_cost = TOKENS_PER_SHAPE() + TOKENS_PER_TEXTURE()
-    _deduct_cost(auth, db, total_cost)
-
-    saved_urls = _save_mv_images(auth.user_id, images_base64)
-    resolved_model_name = model_name or Path(front.filename).stem
-
-    # ── Stage 1 ──
-    try:
-        shape_result = await hunyuan3d_mv_service.generate_shape(
-            db=db,
-            images_base64=images_base64,
-            input_image_url="",
-            remove_background=remove_background,
-            num_inference_steps=num_inference_steps,
-            octree_resolution=octree_resolution,
-            polycount=polycount,
-            guidance_scale=guidance_scale,
-            model_name=resolved_model_name,
-            user_id=auth.user_id,
-            front_image_url=saved_urls.get("front"),
-            left_image_url=saved_urls.get("left"),
-            right_image_url=saved_urls.get("right"),
-            back_image_url=saved_urls.get("back"),
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Stage 1 lỗi: {e}")
-
-    shape_job_id = shape_result["job_id"]
-
-    # ── Đợi Stage 1 xong ──
-    try:
-        await _poll_job_until_done(db, shape_job_id)
-    except TimeoutError as e:
-        raise HTTPException(status_code=504, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-    # ── Stage 2 ──
-    front_b64 = images_base64["front"]
-    side_images = {k: v for k, v in images_base64.items() if k != "front"}
-
-    try:
-        texture_result = await hunyuan3d_mv_service.generate_texture(
-            db=db,
-            shape_job_id=shape_job_id,
-            front_image_base64=front_b64,
-            texture_4k=texture_4k,
-            user_id=auth.user_id,
-            images_base64=side_images or None,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=f"Stage 2 lỗi: {e}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Stage 2 lỗi: {e}")
-
-    return FullPipelineResponse(
-        shape_job_id=shape_job_id,
-        texture_job_id=texture_result["job_id"],
-        status="processing",
-        message="Stage 1 completed. Stage 2 đang chạy. Poll /job-status-mv/{texture_job_id} để biết khi xong.",
-        eta_shape=hunyuan3d_mv_service._get_eta("shape"),
-        eta_texture=hunyuan3d_mv_service._get_eta("texture"),
-    )
-
-
 # ────────────────────────────────────────────────────────────────────────────
-# FULL PIPELINE — Stage 1 + Stage 2 trong 1 lần gọi
+# FULL PIPELINE — Stage 1 + Stage 2 trong 1 lần gọi (upload variant, async)
 # ────────────────────────────────────────────────────────────────────────────
-
-class FullPipelineResponse(BaseModel):
-    shape_job_id: str
-    texture_job_id: str
-    status: str
-    message: str
-    eta_shape: Optional[float] = None
-    eta_texture: Optional[float] = None
-
 
 async def _auto_run_texture(shape_job_id: str, front_b64: str, texture_4k: bool,
                              user_id: Optional[int], side_images: Dict[str, str]):
@@ -792,6 +683,9 @@ async def generate_full_mv_upload(
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"File '{view}' không hợp lệ: {e}")
 
+    total_cost = TOKENS_PER_SHAPE() + TOKENS_PER_TEXTURE()
+    _deduct_cost(auth, db, total_cost)
+
     saved_urls = _save_mv_images(auth.user_id, images_base64)
     resolved_model_name = model_name or Path(front.filename).stem
 
@@ -818,19 +712,6 @@ async def generate_full_mv_upload(
 
     shape_job_id = shape_result["job_id"]
 
-    # Pre-create texture job_id để trả về ngay
-    import uuid as _uuid
-    texture_job_id = str(_uuid.uuid4())
-
-    # Lưu texture job vào DB trước (status=pending)
-    tex_job = ModelJob(
-        job_id=texture_job_id,
-        user_id=auth.user_id,
-        status="pending",
-        stage="texture",
-    )
-    db.add(tex_job)
-    db.commit()
 
     # Chạy Stage 2 ở background
     front_b64 = images_base64["front"]
@@ -846,7 +727,7 @@ async def generate_full_mv_upload(
 
     return FullPipelineResponse(
         shape_job_id=shape_job_id,
-        texture_job_id=texture_job_id,
+        texture_job_id="pending",
         status="processing",
         message="Stage 1 đang chạy. Stage 2 sẽ tự động chạy sau. Poll SSE texture_job_id để theo dõi.",
         eta_shape=hunyuan3d_mv_service._get_eta("shape"),

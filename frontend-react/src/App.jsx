@@ -8,7 +8,6 @@ import MainLayout from "./layouts/MainLayout"
 import Home from "./pages/Home"
 import Convert3D from "./pages/Convert3D"
 import OAuthSuccess from "./pages/OAuthSuccess"
-import Dashboard from "./pages/Dashboard"
 import Admin from "./pages/Admin"
 import Asset from "./pages/Asset"
 
@@ -27,7 +26,6 @@ export default function App() {
         {/* ===== PROTECTED ===== */}
         <Route element={<MainLayout />}>
             <Route path="/convert" element={<Convert3D />} />
-            <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/history" element={<Asset />} />
 
             {/* ===== ADMIN ONLY ===== */}

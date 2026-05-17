@@ -124,6 +124,117 @@ def _build_metrics(before: Dict, after: Dict, duration: float) -> Dict[str, Any]
     }
 
 
+def _build_mesh_metrics(glb_path: Path, n_samples: int = 10_000) -> Dict[str, Any]:
+    """
+    Xuất toàn bộ thông số chất lượng mesh từ file GLB sau mỗi stage.
+
+    Trả về dict gồm:
+      Topology  : vertex_count, face_count, edge_count, is_watertight, is_winding_consistent
+      Geometry  : surface_area, volume (nếu watertight), bounding_box (size + volume),
+                  centroid, aspect_ratio
+      Chất lượng: euler_number, num_components, degenerate_faces,
+                  duplicate_faces, unreferenced_vertices
+      Texture   : has_texture, has_uv, texture_count (chỉ có sau Stage 2)
+    """
+    result: Dict[str, Any] = {}
+    try:
+        import trimesh
+        import numpy as np
+
+        scene_or_mesh = trimesh.load(str(glb_path), force="scene")
+
+        # Gom tất cả geometry trong scene thành 1 mesh tổng hợp
+        if hasattr(scene_or_mesh, "geometry") and scene_or_mesh.geometry:
+            meshes = list(scene_or_mesh.geometry.values())
+            if len(meshes) == 1:
+                mesh = meshes[0]
+            else:
+                mesh = trimesh.util.concatenate(meshes)
+        elif isinstance(scene_or_mesh, trimesh.Trimesh):
+            mesh = scene_or_mesh
+        else:
+            result["mesh_metrics_error"] = "Không parse được mesh từ GLB"
+            return result
+
+        # ── Topology ──────────────────────────────────────────────────
+        result["vertex_count"]            = int(len(mesh.vertices))
+        result["face_count"]              = int(len(mesh.faces))
+        result["edge_count"]              = int(len(mesh.edges_unique))
+        result["is_watertight"]           = bool(mesh.is_watertight)
+        result["is_winding_consistent"]   = bool(mesh.is_winding_consistent)
+
+        # ── Geometry ──────────────────────────────────────────────────
+        result["surface_area"]            = round(float(mesh.area), 6)
+        result["volume"]                  = round(float(mesh.volume), 6) if mesh.is_watertight else None
+
+        bb = mesh.bounding_box
+        bb_extents = mesh.bounding_box.extents.tolist()
+        result["bounding_box"] = {
+            "size_x": round(bb_extents[0], 6),
+            "size_y": round(bb_extents[1], 6),
+            "size_z": round(bb_extents[2], 6),
+            "volume": round(float(np.prod(bb_extents)), 6),
+        }
+        result["centroid"] = [round(float(v), 6) for v in mesh.centroid]
+        if bb_extents and min(bb_extents) > 0:
+            result["aspect_ratio"] = round(max(bb_extents) / min(bb_extents), 4)
+
+        # ── Chất lượng mesh ───────────────────────────────────────────
+        result["euler_number"]            = int(mesh.euler_number)
+        result["num_components"]          = int(len(mesh.split(only_watertight=False)))
+
+        # Degenerate faces (diện tích = 0)
+        areas = mesh.area_faces
+        result["degenerate_faces"]        = int(np.sum(areas < 1e-10))
+
+        # Duplicate faces
+        try:
+            _, unique_idx = np.unique(np.sort(mesh.faces, axis=1), axis=0, return_index=True)
+            result["duplicate_faces"]     = int(len(mesh.faces) - len(unique_idx))
+        except Exception:
+            result["duplicate_faces"]     = None
+
+        # Unreferenced vertices
+        try:
+            referenced = np.unique(mesh.faces)
+            result["unreferenced_vertices"] = int(len(mesh.vertices) - len(referenced))
+        except Exception:
+            result["unreferenced_vertices"] = None
+
+        # ── Texture / UV (đọc từ GLB JSON header) ─────────────────────
+        try:
+            import struct, json as _json
+            data = glb_path.read_bytes()
+            if len(data) > 20 and struct.unpack_from('<I', data, 0)[0] == 0x46546C67:
+                json_len = struct.unpack_from('<I', data, 12)[0]
+                glb_json = _json.loads(data[20:20 + json_len].decode('utf-8', errors='ignore'))
+                result["has_texture"]     = bool(glb_json.get("textures"))
+                result["texture_count"]   = len(glb_json.get("textures", []))
+                result["has_uv"]          = any(
+                    "TEXCOORD_0" in prim.get("attributes", {})
+                    for m in glb_json.get("meshes", [])
+                    for prim in m.get("primitives", [])
+                )
+        except Exception:
+            result["has_texture"] = None
+            result["texture_count"] = None
+            result["has_uv"] = None
+
+        print(
+            f"📐 Mesh metrics: {result['vertex_count']:,} verts | "
+            f"{result['face_count']:,} faces | "
+            f"watertight={result['is_watertight']} | "
+            f"area={result['surface_area']:.4f} | "
+            f"volume={result['volume']}"
+        )
+
+    except Exception as e:
+        result["mesh_metrics_error"] = str(e)
+        print(f"⚠️  _build_mesh_metrics failed: {e}")
+
+    return result
+
+
 # ════════════════════════════════════════════════════════════════════════════
 # Service
 # ════════════════════════════════════════════════════════════════════════════
@@ -545,6 +656,13 @@ class Hunyuan3DMvService:
             metrics = _build_metrics(res_before, res_after, duration)
             self._record_duration("shape", duration)
 
+            # ── Mesh quality metrics (Stage 1) ───────────────────────
+            try:
+                mesh_metrics = _build_mesh_metrics(output_path)
+                metrics["mesh"] = mesh_metrics
+            except Exception as mm_err:
+                print(f"⚠️  [{job_id}] mesh metrics failed: {mm_err}")
+
             output_url = f"{settings.EXTERNAL_URL}/api/v1/download/{job_id}/white"
 
             job = db.query(ModelJob).filter(ModelJob.job_id == job_id).first()
@@ -864,20 +982,25 @@ class Hunyuan3DMvService:
             t_start = time.time()
             self._tex_thread_active = True  # Bug2 fix: đánh dấu thread đang chạy
             try:
-                output_path = await asyncio.wait_for(
-                    loop.run_in_executor(
-                        None, self._do_texture, tex_job_id, shape_job_id, front_image, texture_4k, loop, extra_images
-                    ),
-                    timeout=900  # Bug3 fix: tăng lên 15 phút cho 4K + multi-view
+                output_path = await loop.run_in_executor(
+                    None, self._do_texture,
+		    tex_job_id, shape_job_id, front_image, texture_4k, loop, extra_images
                 )
             finally:
-                self._tex_thread_active = False  # Bug2 fix: thread xong mới cho phép unload
+                self._tex_thread_active = False
             duration = time.time() - t_start
 
             res_after = _get_resources()
             _log_resources(f"[{tex_job_id}] Stage 2 DONE", res_before, res_after, duration)
             metrics = _build_metrics(res_before, res_after, duration)
             self._record_duration("texture", duration)
+
+            # ── Mesh quality metrics (Stage 2) ───────────────────────
+            try:
+                mesh_metrics = _build_mesh_metrics(output_path)
+                metrics["mesh"] = mesh_metrics
+            except Exception as mm_err:
+                print(f"⚠️  [{tex_job_id}] mesh metrics failed: {mm_err}")
 
             self._unload_texture()
 

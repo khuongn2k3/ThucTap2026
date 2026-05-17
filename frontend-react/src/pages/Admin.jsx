@@ -8,16 +8,16 @@ import api, {
 } from "../services/api"
 
 /* ============================================================
-   Admin.jsx — Sidebar Layout với đầy đủ sections
+   Admin.jsx — Sidebar Layout with all sections
    Sections: Overview | Users | Jobs | Gallery | API Keys
    ============================================================ */
 
 const SECTIONS = [
-  { id: "overview",  label: "Tổng quan",   icon: IconGrid },
-  { id: "users",     label: "Người dùng",  icon: IconUsers },
+  { id: "overview",  label: "Overview",   icon: IconGrid },
+  { id: "users",     label: "Users",  icon: IconUsers },
   { id: "jobs",      label: "Jobs 3D",     icon: IconCube },
   { id: "gallery",   label: "Gallery",     icon: IconImage },
-  { id: "pricing",   label: "Giá token",   icon: IconCoin },
+  { id: "pricing",   label: "Token Pricing",   icon: IconCoin },
   { id: "apikeys",   label: "API Keys",    icon: IconKey },
 ]
 
@@ -81,7 +81,7 @@ export default function Admin() {
 }
 
 /* ============================================================
-   SECTION: OVERVIEW — với biểu đồ
+   SECTION: OVERVIEW — with charts
    ============================================================ */
 function MiniBarChart({ data, color = "#7c6ef5", height = 48 }) {
   if (!data?.length) return null
@@ -155,12 +155,12 @@ function SectionOverview() {
       .catch(() => {})
   }, [])
 
-  // Tạo dữ liệu giả lập cho biểu đồ jobs 7 ngày (dùng recentJobs nếu có)
+  // Build last-7-days bar chart data using recentJobs
   const today = new Date()
   const last7 = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(today)
     d.setDate(d.getDate() - (6 - i))
-    return { label: d.toLocaleDateString("vi-VN", { weekday: "short" }), value: 0 }
+    return { label: d.toLocaleDateString("en-US", { weekday: "short" }), value: 0 }
   })
   recentJobs.forEach(j => {
     if (!j.created_at) return
@@ -170,35 +170,35 @@ function SectionOverview() {
   })
 
   const jobSegments = [
-    { value: stats?.completed ?? 0, color: "#10b981", label: "Hoàn thành" },
-    { value: stats?.processing ?? 0, color: "#f59e0b", label: "Đang xử lý" },
-    { value: stats?.failed ?? 0, color: "#ef4444", label: "Lỗi" },
-    { value: Math.max(0, (stats?.jobs ?? 0) - (stats?.completed ?? 0) - (stats?.processing ?? 0) - (stats?.failed ?? 0)), color: "#e5e7eb", label: "Khác" },
+    { value: stats?.completed ?? 0, color: "#10b981", label: "Completed" },
+    { value: stats?.processing ?? 0, color: "#f59e0b", label: "Processing" },
+    { value: stats?.failed ?? 0, color: "#ef4444", label: "Error" },
+    { value: Math.max(0, (stats?.jobs ?? 0) - (stats?.completed ?? 0) - (stats?.processing ?? 0) - (stats?.failed ?? 0)), color: "#e5e7eb", label: "Other" },
   ].filter(s => s.value > 0)
 
   return (
     <div>
-      <PageHeader title="Tổng quan" subtitle="Thống kê toàn bộ hệ thống Hunyuan3D" />
+      <PageHeader title="Overview" subtitle="System-wide statistics for Hunyuan3D" />
 
       {loading ? <LoadingBox /> : (
         <>
           {/* Stat cards */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 20 }}>
-            <StatCard title="Người dùng"  value={stats?.users      ?? 0} color="indigo"  icon="👤" />
-            <StatCard title="Jobs 3D"     value={stats?.jobs       ?? 0} color="emerald" icon="🧊" />
-            <StatCard title="Đang xử lý" value={stats?.processing  ?? 0} color="amber"   icon="⚙️" />
-            <StatCard title="Lỗi"         value={stats?.failed     ?? 0} color="red"     icon="⚠️" />
+            <StatCard title="Users"  value={stats?.users      ?? 0} color="indigo"  icon="" />
+            <StatCard title="Jobs 3D"     value={stats?.jobs       ?? 0} color="emerald" icon="" />
+            <StatCard title="Processing" value={stats?.processing  ?? 0} color="amber"   icon="" />
+            <StatCard title="Errors"         value={stats?.failed     ?? 0} color="red"     icon="" />
           </div>
 
           {/* Charts row */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
 
-            {/* Jobs 7 ngày */}
+            {/* Jobs — Last 7 Days */}
             <div style={{ background: "#fff", borderRadius: 16, padding: "20px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", border: "1px solid #f0f0f0" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>📈 Jobs 7 ngày gần đây</div>
-                  <div style={{ fontSize: 11, color: "#aaa", marginTop: 2 }}>Dựa trên 5 jobs gần nhất</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>Jobs — Last 7 Days</div>
+                  <div style={{ fontSize: 11, color: "#aaa", marginTop: 2 }}>Based on the 5 most recent jobs</div>
                 </div>
                 <div style={{ fontSize: 22, fontWeight: 700, color: "#7c6ef5" }}>{stats?.jobs ?? 0}</div>
               </div>
@@ -212,14 +212,14 @@ function SectionOverview() {
 
             {/* Donut job status */}
             <div style={{ background: "#fff", borderRadius: 16, padding: "20px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", border: "1px solid #f0f0f0" }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#111", marginBottom: 14 }}>🧊 Tỉ lệ trạng thái jobs</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#111", marginBottom: 14 }}>Job Status Breakdown</div>
               <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
                 <DonutChart segments={jobSegments.length ? jobSegments : [{ value: 1, color: "#e5e7eb" }]} size={90} />
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {[
-                    { label: "Hoàn thành", value: stats?.completed ?? 0, color: "#10b981" },
-                    { label: "Đang xử lý", value: stats?.processing ?? 0, color: "#f59e0b" },
-                    { label: "Lỗi",        value: stats?.failed ?? 0,     color: "#ef4444" },
+                    { label: "Completed", value: stats?.completed ?? 0, color: "#10b981" },
+                    { label: "Processing", value: stats?.processing ?? 0, color: "#f59e0b" },
+                    { label: "Error",       value: stats?.failed ?? 0,     color: "#ef4444" },
                   ].map(s => (
                     <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 7 }}>
                       <div style={{ width: 8, height: 8, borderRadius: "50%", background: s.color, flexShrink: 0 }} />
@@ -237,14 +237,14 @@ function SectionOverview() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
         {/* Recent Jobs */}
         <div style={{ background: "#fff", borderRadius: 16, padding: "20px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", border: "1px solid #f0f0f0" }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#111", marginBottom: 14 }}>🧊 Jobs gần đây</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#111", marginBottom: 14 }}>Recent Jobs</div>
           {recentJobs.length === 0
-            ? <div style={{ fontSize: 12, color: "#bbb", textAlign: "center", padding: "20px 0" }}>Chưa có job nào</div>
+            ? <div style={{ fontSize: 12, color: "#bbb", textAlign: "center", padding: "20px 0" }}>No jobs yet</div>
             : recentJobs.map(j => (
               <div key={j.job_id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid #f5f5f5" }}>
                 <div>
                   <div style={{ fontSize: 12, color: "#333", fontFamily: "monospace" }}>{j.job_id?.slice(0, 14)}…</div>
-                  <div style={{ fontSize: 11, color: "#aaa" }}>{j.user_name || "—"} · {j.created_at ? new Date(j.created_at).toLocaleString("vi-VN") : "—"}</div>
+                  <div style={{ fontSize: 11, color: "#aaa" }}>{j.user_name || "—"} · {j.created_at ? new Date(j.created_at).toLocaleString() : "—"}</div>
                 </div>
                 <StatusBadge status={j.status} />
               </div>
@@ -254,9 +254,9 @@ function SectionOverview() {
 
         {/* Recent Users */}
         <div style={{ background: "#fff", borderRadius: 16, padding: "20px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", border: "1px solid #f0f0f0" }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#111", marginBottom: 14 }}>👤 Người dùng mới nhất</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#111", marginBottom: 14 }}>Latest Users</div>
           {recentUsers.length === 0
-            ? <div style={{ fontSize: 12, color: "#bbb", textAlign: "center", padding: "20px 0" }}>Chưa có người dùng nào</div>
+            ? <div style={{ fontSize: 12, color: "#bbb", textAlign: "center", padding: "20px 0" }}>No users yet</div>
             : recentUsers.map(u => (
               <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid #f5f5f5" }}>
                 {u.avatar_url
@@ -276,16 +276,16 @@ function SectionOverview() {
 
       {/* Quick links */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
-        <QuickCard title="Quản lý người dùng" desc="Đổi role, khóa/mở tài khoản, điều chỉnh token" icon="👤" />
-        <QuickCard title="Gallery chờ duyệt" desc="Duyệt các submission mới từ người dùng" icon="🖼" />
-        <QuickCard title="API Keys" desc="Cấp và quản lý key cho developer bên ngoài" icon="🔑" />
+        <QuickCard title="User Management" desc="Change roles, ban/unban accounts, adjust tokens" />
+        <QuickCard title="Pending Gallery" desc="Review new submissions from users" />
+        <QuickCard title="API Keys" desc="Issue and manage keys for external developers" />
       </div>
     </div>
   )
 }
 
 /* ============================================================
-   SECTION: PRICING — Quản lý giá token
+   SECTION: PRICING — Token pricing management
    ============================================================ */
 function SectionPricing() {
   const DEFAULT_PRICING = {
@@ -311,7 +311,7 @@ function SectionPricing() {
         setEditing(merged)
       })
       .catch(() => {
-        // Endpoint chưa có → dùng giá mặc định, vẫn cho chỉnh và lưu
+        // Endpoint not available yet — use defaults, still allow editing and saving
         setPricing(DEFAULT_PRICING)
         setEditing(DEFAULT_PRICING)
       })
@@ -328,7 +328,7 @@ function SectionPricing() {
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (e) {
-      setError(e.response?.data?.detail || "Lưu thất bại, kiểm tra lại backend.")
+      setError(e.response?.data?.detail || "Save failed, please check the backend.")
     } finally { setSaving(false) }
   }
 
@@ -339,34 +339,34 @@ function SectionPricing() {
 
   const CARDS = [
     {
-      title: "Stage 1 — Tạo White Mesh",
-      desc: "Token trừ khi user generate hình dạng 3D từ ảnh",
+      title: "Stage 1 — Generate White Mesh",
+      desc: "Tokens deducted when a user generates a 3D shape from images",
       key: "stage1_tokens",
-      icon: "🧊",
+      value: editing.stage1_tokens,
       color: "#7c6ef5",
       bg: "#f5f3ff",
     },
     {
-      title: "Stage 2 — Sơn Texture",
-      desc: "Token trừ khi user chạy texture lên white mesh",
+      title: "Stage 2 — Apply Texture",
+      desc: "Tokens deducted when a user applies texture to a white mesh",
       key: "stage2_tokens",
-      icon: "🎨",
+      value: editing.stage2_tokens,
       color: "#3b82f6",
       bg: "#eff6ff",
     },
     {
-      title: "Bonus khi đăng ký",
-      desc: "Token tặng miễn phí khi tạo tài khoản mới",
+      title: "Sign-up Bonus",
+      desc: "Free tokens granted on new account creation",
       key: "signup_bonus",
-      icon: "🎁",
+      value: editing.signup_bonus,
       color: "#10b981",
       bg: "#f0fdf4",
     },
     {
-      title: "Bonus hàng ngày",
-      desc: "Token tặng mỗi ngày khi user đăng nhập (0 = tắt)",
+      title: "Daily Bonus",
+      desc: "Tokens granted each day on login (0 = disabled)",
       key: "daily_bonus",
-      icon: "📅",
+      value: editing.daily_bonus,
       color: "#f59e0b",
       bg: "#fffbeb",
     },
@@ -375,15 +375,15 @@ function SectionPricing() {
   return (
     <div>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24 }}>
-        <PageHeader title="Giá token" subtitle="Cấu hình số token tiêu thụ cho từng tính năng" noMargin />
+        <PageHeader title="Token Pricing" subtitle="Configure token consumption per feature" noMargin />
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          {saved && <span style={{ fontSize: 12, color: "#10b981", fontWeight: 500 }}>✓ Đã lưu</span>}
+          {saved && <span style={{ fontSize: 12, color: "#10b981", fontWeight: 500 }}>Saved</span>}
           {hasChanged && (
             <button onClick={() => setEditing({ ...pricing })} style={{
               padding: "8px 16px", borderRadius: 10, border: "1px solid #e5e7eb",
               background: "none", fontSize: 13, color: "#666", cursor: "pointer",
               fontFamily: "'DM Sans', sans-serif",
-            }}>Hoàn tác</button>
+            }}>Revert</button>
           )}
           <button onClick={handleSave} disabled={saving || !hasChanged} style={{
             padding: "8px 20px", borderRadius: 10, border: "none",
@@ -392,7 +392,7 @@ function SectionPricing() {
             fontSize: 13, fontWeight: 500, cursor: hasChanged ? "pointer" : "not-allowed",
             fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s",
           }}>
-            {saving ? "Đang lưu..." : "Lưu thay đổi"}
+            {saving ? "Saving..." : "Save Changes"}
           </button>
         </div>
       </div>
@@ -415,7 +415,7 @@ function SectionPricing() {
                   <div style={{
                     width: 38, height: 38, borderRadius: 10, background: c.bg,
                     display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0,
-                  }}>{c.icon}</div>
+                  }}></div>
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 600, color: "#111" }}>{c.title}</div>
                     <div style={{ fontSize: 11, color: "#999", marginTop: 2 }}>{c.desc}</div>
@@ -424,7 +424,7 @@ function SectionPricing() {
 
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 11, color: "#aaa", marginBottom: 6 }}>Số token</div>
+                    <div style={{ fontSize: 11, color: "#aaa", marginBottom: 6 }}>Tokens</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <button onClick={() => setEditing(p => ({ ...p, [c.key]: Math.max(0, p[c.key] - 1) }))}
                         style={{ width: 28, height: 28, borderRadius: 7, border: "1px solid #e5e7eb", background: "#f9fafb", cursor: "pointer", fontSize: 16, color: "#555", display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
@@ -435,14 +435,14 @@ function SectionPricing() {
                       }} />
                       <button onClick={() => setEditing(p => ({ ...p, [c.key]: p[c.key] + 1 }))}
                         style={{ width: 28, height: 28, borderRadius: 7, border: "1px solid #e5e7eb", background: "#f9fafb", cursor: "pointer", fontSize: 16, color: "#555", display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
-                      <span style={{ fontSize: 12, color: "#aaa" }}>⚡ token</span>
+                      <span style={{ fontSize: 12, color: "#aaa" }}>tokens</span>
                     </div>
                   </div>
 
-                  {/* So sánh với giá hiện tại */}
+                  {/* Compare with current value */}
                   {editing[c.key] !== pricing[c.key] && (
                     <div style={{ textAlign: "right", flexShrink: 0 }}>
-                      <div style={{ fontSize: 10, color: "#aaa" }}>Hiện tại</div>
+                      <div style={{ fontSize: 10, color: "#aaa" }}>Current</div>
                       <div style={{ fontSize: 13, color: "#bbb", textDecoration: "line-through" }}>{pricing[c.key]}</div>
                       <div style={{ fontSize: 10, color: editing[c.key] > pricing[c.key] ? "#ef4444" : "#10b981" }}>
                         {editing[c.key] > pricing[c.key] ? "▲" : "▼"} {Math.abs(editing[c.key] - pricing[c.key])}
@@ -454,19 +454,19 @@ function SectionPricing() {
             ))}
           </div>
 
-          {/* Preview tổng chi phí */}
+          {/* Cost preview summary */}
           <div style={{ background: "#fff", borderRadius: 16, padding: "20px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", border: "1px solid #f0f0f0" }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#111", marginBottom: 14 }}>💡 Tổng kết</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#111", marginBottom: 14 }}>Summary</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
               {[
-                { label: "Generate đầy đủ (S1+S2)", value: editing.stage1_tokens + editing.stage2_tokens, color: "#7c6ef5" },
-                { label: "Chỉ Stage 1 (no texture)", value: editing.stage1_tokens, color: "#3b82f6" },
-                { label: "Token tặng khi đăng ký", value: editing.signup_bonus, color: "#10b981" },
+                { label: "Full Generation (S1+S2)", value: editing.stage1_tokens + editing.stage2_tokens, color: "#7c6ef5" },
+                { label: "Stage 1 Only (no texture)", value: editing.stage1_tokens, color: "#3b82f6" },
+                { label: "Sign-up Bonus Tokens", value: editing.signup_bonus, color: "#10b981" },
               ].map(s => (
                 <div key={s.label} style={{ background: "#f9fafb", borderRadius: 10, padding: "14px 16px" }}>
                   <div style={{ fontSize: 11, color: "#888", marginBottom: 6 }}>{s.label}</div>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>⚡ {s.value}</div>
-                  <div style={{ fontSize: 11, color: "#bbb", marginTop: 4 }}>token</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
+                  <div style={{ fontSize: 11, color: "#bbb", marginTop: 4 }}>tokens</div>
                 </div>
               ))}
             </div>
@@ -499,7 +499,7 @@ function SectionUsers({ currentUser }) {
 
   const toggleRole = async (user) => {
     const newRole = user.role === "admin" ? "user" : "admin"
-    if (!window.confirm(`Đổi role của ${user.name} sang "${newRole}"?`)) return
+    if (!window.confirm(`Change role of ${user.name} to "${newRole}"?`)) return
     setBusy(user.id)
     try {
       await api.patch(`/admin/users/${user.id}/role`, { role: newRole })
@@ -508,8 +508,8 @@ function SectionUsers({ currentUser }) {
   }
 
   const toggleBan = async (user) => {
-    const action = user.is_banned ? "mở khóa" : "khóa"
-    if (!window.confirm(`${action} tài khoản ${user.name}?`)) return
+    const action = user.is_banned ? "unban" : "ban"
+    if (!window.confirm(`${action} account ${user.name}?`)) return
     setBusy(user.id + "_ban")
     try {
       await api.patch(`/admin/users/${user.id}/ban`, { banned: !user.is_banned })
@@ -518,7 +518,7 @@ function SectionUsers({ currentUser }) {
   }
 
   const adjustTokens = async (user) => {
-    const input = window.prompt(`Cộng/trừ token cho ${user.name} (âm để trừ):`)
+    const input = window.prompt(`Adjust tokens for ${user.name} (negative to subtract):`)
     if (!input || isNaN(input)) return
     setBusy(user.id + "_tok")
     try {
@@ -535,21 +535,21 @@ function SectionUsers({ currentUser }) {
 
   return (
     <div>
-      <PageHeader title="Người dùng" subtitle={`${filtered.length} tài khoản (không tính tài khoản của bạn)`} />
+      <PageHeader title="Users" subtitle={`${filtered.length} accounts (excluding your own)`} />
       <div className="mb-4">
-        <SearchInput value={search} onChange={setSearch} placeholder="Tìm theo tên hoặc email..." />
+        <SearchInput value={search} onChange={setSearch} placeholder="Search by name or email..." />
       </div>
       {loading ? <LoadingBox /> : (
         <div className="overflow-hidden rounded-2xl bg-white shadow">
           <table className="w-full text-left">
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
               <tr>
-                <th className="px-5 py-3">Người dùng</th>
+                <th className="px-5 py-3">User</th>
                 <th className="px-5 py-3">Role</th>
                 <th className="px-5 py-3">Tokens</th>
-                <th className="px-5 py-3">Ngày tạo</th>
-                <th className="px-5 py-3">Trạng thái</th>
-                <th className="px-5 py-3">Hành động</th>
+                <th className="px-5 py-3">Created</th>
+                <th className="px-5 py-3">Status</th>
+                <th className="px-5 py-3">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -568,14 +568,14 @@ function SectionUsers({ currentUser }) {
                     </div>
                   </td>
                   <td className="px-5 py-3"><RoleBadge role={u.role} /></td>
-                  <td className="px-5 py-3"><span className="font-mono text-sm text-gray-700">⚡ {u.tokens ?? 0}</span></td>
+                  <td className="px-5 py-3"><span className="font-mono text-sm text-gray-700">{u.tokens ?? 0}</span></td>
                   <td className="px-5 py-3 text-gray-500 text-xs">
-                    {u.created_at ? new Date(u.created_at).toLocaleDateString("vi-VN") : "—"}
+                    {u.created_at ? new Date(u.created_at).toLocaleDateString() : "—"}
                   </td>
                   <td className="px-5 py-3">
                     {u.is_banned
-                      ? <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs text-red-600">Bị khóa</span>
-                      : <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-600">Hoạt động</span>
+                      ? <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs text-red-600">Banned</span>
+                      : <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-600">Active</span>
                     }
                   </td>
                   <td className="px-5 py-3">
@@ -585,7 +585,7 @@ function SectionUsers({ currentUser }) {
                       </ActionBtn>
                       <ActionBtn onClick={() => adjustTokens(u)} disabled={!!busy} color="amber">Token</ActionBtn>
                       <ActionBtn onClick={() => toggleBan(u)} disabled={!!busy} color={u.is_banned ? "emerald" : "red"}>
-                        {busy === u.id + "_ban" ? "..." : u.is_banned ? "Mở khóa" : "Khóa"}
+                        {busy === u.id + "_ban" ? "..." : u.is_banned ? "Unban" : "Ban"}
                       </ActionBtn>
                     </div>
                   </td>
@@ -593,7 +593,7 @@ function SectionUsers({ currentUser }) {
               ))}
             </tbody>
           </table>
-          {filtered.length === 0 && <EmptyBox text="Không tìm thấy người dùng nào" />}
+          {filtered.length === 0 && <EmptyBox text="No users found" />}
         </div>
       )}
     </div>
@@ -627,11 +627,11 @@ function SectionJobs() {
   const totalPages  = Math.ceil(total / LIMIT)
   const currentPage = Math.floor(offset / LIMIT) + 1
   const STATUS_TABS = ["all","pending","processing","completed","failed"]
-  const TAB_LABELS  = { all:"Tất cả", pending:"Chờ", processing:"Xử lý", completed:"Xong", failed:"Lỗi" }
+  const TAB_LABELS  = { all:"All", pending:"Pending", processing:"Processing", completed:"Done", failed:"Error" }
 
   return (
     <div>
-      <PageHeader title="Jobs 3D" subtitle={`${total} jobs trong hệ thống`} />
+      <PageHeader title="Jobs 3D" subtitle={`${total} jobs in the system`} />
       <div className="flex gap-1 mb-4 rounded-xl border border-gray-200 bg-gray-50 p-1 w-fit">
         {STATUS_TABS.map(s => (
           <TabBtn key={s} active={statusFilter === s} onClick={() => setStatusFilter(s)}>{TAB_LABELS[s]}</TabBtn>
@@ -643,10 +643,10 @@ function SectionJobs() {
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
               <tr>
                 <th className="px-5 py-3">Job ID</th>
-                <th className="px-5 py-3">Người dùng</th>
-                <th className="px-5 py-3">Trạng thái</th>
-                <th className="px-5 py-3">Token dùng</th>
-                <th className="px-5 py-3">Ngày tạo</th>
+                <th className="px-5 py-3">User</th>
+                <th className="px-5 py-3">Status</th>
+                <th className="px-5 py-3">Tokens Used</th>
+                <th className="px-5 py-3">Created</th>
                 <th className="px-5 py-3">File 3D</th>
               </tr>
             </thead>
@@ -656,9 +656,9 @@ function SectionJobs() {
                   <td className="px-5 py-3 font-mono text-xs text-gray-500">{j.job_id?.slice(0,16)}…</td>
                   <td className="px-5 py-3 text-gray-700">{j.user_name || j.user_id}</td>
                   <td className="px-5 py-3"><StatusBadge status={j.status} /></td>
-                  <td className="px-5 py-3 text-gray-600">⚡ {j.tokens_used ?? 1}</td>
+                  <td className="px-5 py-3 text-gray-600">{j.tokens_used ?? 1}</td>
                   <td className="px-5 py-3 text-gray-400 text-xs">
-                    {j.created_at ? new Date(j.created_at).toLocaleString("vi-VN") : "—"}
+                    {j.created_at ? new Date(j.created_at).toLocaleString() : "—"}
                   </td>
                   <td className="px-5 py-3">
                     {j.output_model_url
@@ -670,14 +670,14 @@ function SectionJobs() {
               ))}
             </tbody>
           </table>
-          {jobs.length === 0 && <EmptyBox text="Không có job nào" />}
+          {jobs.length === 0 && <EmptyBox text="No jobs found" />}
         </div>
       )}
       {totalPages > 1 && (
         <div className="mt-6 flex items-center justify-center gap-3">
-          <PageBtn disabled={offset === 0} onClick={() => setOffset(o => Math.max(0, o - LIMIT))}>← Trước</PageBtn>
+          <PageBtn disabled={offset === 0} onClick={() => setOffset(o => Math.max(0, o - LIMIT))}>Prev</PageBtn>
           <span className="text-sm text-gray-500">{currentPage} / {totalPages}</span>
-          <PageBtn disabled={offset + LIMIT >= total} onClick={() => setOffset(o => o + LIMIT)}>Sau →</PageBtn>
+          <PageBtn disabled={offset + LIMIT >= total} onClick={() => setOffset(o => o + LIMIT)}>Next</PageBtn>
         </div>
       )}
     </div>
@@ -691,10 +691,10 @@ function SectionGallery() {
   const [tab, setTab] = useState("pending")
   return (
     <div>
-      <PageHeader title="Gallery" subtitle="Quản lý và duyệt các mô hình 3D" />
+      <PageHeader title="Gallery" subtitle="Manage and review 3D model submissions" />
       <div className="flex rounded-xl border border-gray-200 bg-gray-50 p-1 w-fit mb-6">
-        <TabBtn active={tab === "pending"} onClick={() => setTab("pending")}>Chờ duyệt</TabBtn>
-        <TabBtn active={tab === "all"}     onClick={() => setTab("all")}>Tất cả</TabBtn>
+        <TabBtn active={tab === "pending"} onClick={() => setTab("pending")}>Pending Review</TabBtn>
+        <TabBtn active={tab === "all"}     onClick={() => setTab("all")}>All</TabBtn>
       </div>
       {tab === "pending" ? <GalleryPending /> : <GalleryAll />}
     </div>
@@ -723,7 +723,7 @@ function GalleryPending() {
     } finally { setBusy(null) }
   }
   const reject = async (id) => {
-    if (!window.confirm("Từ chối và xóa submission này?")) return
+    if (!window.confirm("Reject and delete this submission?")) return
     setBusy(id + "_reject")
     try {
       await api.patch(`/gallery/admin/${id}/reject`)
@@ -732,18 +732,18 @@ function GalleryPending() {
   }
 
   if (loading) return <LoadingBox />
-  if (!submissions.length) return <EmptyBox text="Không có submission nào chờ duyệt ✅" />
+  if (!submissions.length) return <EmptyBox text="No submissions pending review" />
   return (
     <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
       {submissions.map(sub => (
         <SubmissionCard key={sub.id} sub={sub} busy={busy}>
           <button onClick={() => approve(sub.id)} disabled={!!busy}
             className="flex-1 rounded-xl bg-emerald-500 py-2 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-40 transition">
-            {busy === sub.id + "_approve" ? "..." : "✓ Duyệt"}
+            {busy === sub.id + "_approve" ? "..." : "Approve"}
           </button>
           <button onClick={() => reject(sub.id)} disabled={!!busy}
             className="flex-1 rounded-xl bg-red-500 py-2 text-sm font-semibold text-white hover:bg-red-600 disabled:opacity-40 transition">
-            {busy === sub.id + "_reject" ? "..." : "✕ Từ chối"}
+            {busy === sub.id + "_reject" ? "..." : "Reject"}
           </button>
         </SubmissionCard>
       ))}
@@ -769,7 +769,7 @@ function GalleryAll() {
   useEffect(() => { fetchAll(offset) }, [offset])
 
   const deleteOne = async (id) => {
-    if (!window.confirm("Xóa vĩnh viễn submission này?")) return
+    if (!window.confirm("Permanently delete this submission?")) return
     setBusy(id + "_delete")
     try {
       await api.delete(`/gallery/admin/${id}`)
@@ -787,33 +787,33 @@ function GalleryAll() {
   }
 
   if (loading) return <LoadingBox />
-  if (!submissions.length) return <EmptyBox text="Chưa có submission nào" />
+  if (!submissions.length) return <EmptyBox text="No submissions yet" />
   const totalPages  = Math.ceil(total / LIMIT)
   const currentPage = Math.floor(offset / LIMIT) + 1
   return (
     <div>
-      <p className="mb-4 text-sm text-gray-500">Tổng: <span className="font-semibold text-gray-700">{total}</span> · Trang {currentPage}/{totalPages}</p>
+      <p className="mb-4 text-sm text-gray-500">Total: <span className="font-semibold text-gray-700">{total}</span> · Page {currentPage}/{totalPages}</p>
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {submissions.map(sub => (
           <SubmissionCard key={sub.id} sub={sub} busy={busy} showStatus>
             {!sub.is_public && (
               <button onClick={() => approve(sub)} disabled={!!busy}
                 className="flex-1 rounded-xl bg-emerald-500 py-2 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-40 transition">
-                {busy === sub.id + "_approve" ? "..." : "✓ Duyệt"}
+                {busy === sub.id + "_approve" ? "..." : "Approve"}
               </button>
             )}
             <button onClick={() => deleteOne(sub.id)} disabled={!!busy}
               className="flex-1 rounded-xl bg-red-500 py-2 text-sm font-semibold text-white hover:bg-red-600 disabled:opacity-40 transition">
-              {busy === sub.id + "_delete" ? "..." : "🗑 Xóa"}
+              {busy === sub.id + "_delete" ? "..." : "Delete"}
             </button>
           </SubmissionCard>
         ))}
       </div>
       {totalPages > 1 && (
         <div className="mt-8 flex items-center justify-center gap-2">
-          <PageBtn disabled={offset === 0} onClick={() => setOffset(o => Math.max(0, o - LIMIT))}>← Trước</PageBtn>
+          <PageBtn disabled={offset === 0} onClick={() => setOffset(o => Math.max(0, o - LIMIT))}>Prev</PageBtn>
           <span className="px-3 text-sm text-gray-600">{currentPage} / {totalPages}</span>
-          <PageBtn disabled={offset + LIMIT >= total} onClick={() => setOffset(o => o + LIMIT)}>Sau →</PageBtn>
+          <PageBtn disabled={offset + LIMIT >= total} onClick={() => setOffset(o => o + LIMIT)}>Next</PageBtn>
         </div>
       )}
     </div>
@@ -843,31 +843,31 @@ function SectionApiKeys() {
 
   // P1: error handling cho revoke
   const revokeKey = async (key) => {
-    if (!window.confirm(`Thu hồi key "${key.name}"? Key sẽ ngừng hoạt động ngay lập tức.`)) return
+    if (!window.confirm(`Revoke key "${key.name}"? It will stop working immediately.`)) return
     setBusy(key.id + "_revoke")
     setActionError("")
     try {
       await revokeApiKey(key.id)                       // P2: named export
       setKeys(prev => prev.map(k => k.id === key.id ? { ...k, status: "revoked" } : k))
     } catch (e) {
-      setActionError(e.response?.data?.detail || `Thu hồi key "${key.name}" thất bại, thử lại.`)
+      setActionError(e.response?.data?.detail || `Failed to revoke key "${key.name}", please try again.`)
     } finally { setBusy(null) }
   }
 
   // P1: error handling cho delete
   const deleteKey = async (key) => {
-    if (!window.confirm(`Xóa vĩnh viễn key "${key.name}"?`)) return
+    if (!window.confirm(`Permanently delete key "${key.name}"?`)) return
     setBusy(key.id + "_delete")
     setActionError("")
     try {
       await deleteApiKey(key.id)                       // P2: named export
       setKeys(prev => prev.filter(k => k.id !== key.id))
     } catch (e) {
-      setActionError(e.response?.data?.detail || `Xóa key "${key.name}" thất bại, thử lại.`)
+      setActionError(e.response?.data?.detail || `Failed to delete key "${key.name}", please try again.`)
     } finally { setBusy(null) }
   }
 
-  // P0: chỉ copy nếu có key_value (vừa tạo xong), không copy rỗng
+  // P0: only copy if key_value is present (just created), skip otherwise
   const copyKey = (key) => {
     if (!key.key_value) return
     navigator.clipboard.writeText(key.key_value).then(() => {
@@ -883,7 +883,7 @@ function SectionApiKeys() {
   return (
     <div>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24 }}>
-        <PageHeader title="API Keys" subtitle="Cấp quyền truy cập API cho developer bên ngoài tạo model 3D" noMargin />
+        <PageHeader title="API Keys" subtitle="Grant API access to external developers for 3D model generation" noMargin />
         <button onClick={() => setShowCreate(true)} style={{
           display: "flex", alignItems: "center", gap: 6,
           background: "linear-gradient(135deg, #7c6ef5, #5650cc)",
@@ -891,18 +891,18 @@ function SectionApiKeys() {
           padding: "9px 18px", fontSize: 13, fontWeight: 500,
           cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap",
         }}>
-          + Tạo API Key
+          + Create API Key
         </button>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-6">
-        <StatCard title="Đang hoạt động" value={activeCount}  color="emerald" icon="✓" />
-        <StatCard title="Đã thu hồi"     value={revokedCount} color="red"     icon="✕" />
-        <StatCard title="Tổng lượt gọi"  value={totalCalls}   color="indigo"  icon="↗" />
+        <StatCard title="Active" value={activeCount}  color="emerald" icon="" />
+        <StatCard title="Revoked"     value={revokedCount} color="red"     icon="" />
+        <StatCard title="Total Calls"  value={totalCalls}   color="indigo"  icon="" />
       </div>
 
-      {/* P1: hiện lỗi action inline, không dùng alert */}
+      {/* P1: show action errors inline */}
       {actionError && (
         <div style={{
           marginBottom: 12, padding: "10px 14px", borderRadius: 8,
@@ -924,12 +924,12 @@ function SectionApiKeys() {
             </colgroup>
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
               <tr>
-                <th className="px-5 py-3">Tên key</th>
+                <th className="px-5 py-3">Key Name</th>
                 <th className="px-5 py-3">API Key</th>
-                <th className="px-5 py-3">Trạng thái</th>
-                <th className="px-5 py-3">Quota / tháng</th>
-                <th className="px-5 py-3">Đã dùng</th>
-                <th className="px-5 py-3">Hành động</th>
+                <th className="px-5 py-3">Status</th>
+                <th className="px-5 py-3">Monthly Quota</th>
+                <th className="px-5 py-3">Usage</th>
+                <th className="px-5 py-3">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -940,11 +940,11 @@ function SectionApiKeys() {
                     <td className="px-5 py-3">
                       <div className="font-medium text-gray-900 truncate">{k.name}</div>
                       <div className="text-xs text-gray-400 truncate">{k.owner_email || "—"}</div>
-                      {/* P1: hiện expires_at, đỏ nếu đã hết hạn */}
+                      {/* P1: show expires_at, red if expired */}
                       {k.expires_at && (
                         <div className={`text-xs mt-0.5 ${isExpired ? "text-red-400" : "text-gray-400"}`}>
-                          {isExpired ? "⚠ Hết hạn: " : "Đến: "}
-                          {new Date(k.expires_at).toLocaleDateString("vi-VN")}
+                          {isExpired ? "Expired: " : "Expires: "}
+                          {new Date(k.expires_at).toLocaleDateString()}
                         </div>
                       )}
                     </td>
@@ -955,26 +955,26 @@ function SectionApiKeys() {
                           background: "#f3f4f6", padding: "2px 6px", borderRadius: 4, color: "#555",
                           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120,
                         }}>{k.key_preview || maskKey(k.key_value)}</span>
-                        {/* P0: chỉ hiện nút copy nếu có key_value (vừa tạo), còn lại ẩn */}
+                        {/* P0: only show copy button if key_value present (just created) */}
                         {k.key_value ? (
-                          <button onClick={() => copyKey(k)} title="Copy key đầy đủ" style={{
+                          <button onClick={() => copyKey(k)} title="Copy full key" style={{
                             background: "none", border: "none", cursor: "pointer",
                             color: copiedId === k.id ? "#10b981" : "#aaa", fontSize: 14, padding: 2, flexShrink: 0,
                           }}>{copiedId === k.id ? "✓" : "⎘"}</button>
                         ) : (
-                          <span title="Key không thể xem lại" style={{ fontSize: 12, color: "#d1d5db", padding: 2, flexShrink: 0, cursor: "default" }}>⎘</span>
+                          <span title="Key cannot be viewed again" style={{ fontSize: 12, color: "#d1d5db", padding: 2, flexShrink: 0, cursor: "default" }}>⎘</span>
                         )}
                       </div>
                     </td>
                     <td className="px-5 py-3"><ApiKeyStatusBadge status={k.status} /></td>
                     <td className="px-5 py-3 text-gray-600 text-xs">
-                      {k.quota_per_month == null ? "∞ Không giới hạn" : `${k.quota_per_month} calls`}
+                      {k.quota_per_month == null ? "Unlimited" : `${k.quota_per_month} calls`}
                     </td>
                     <td className="px-5 py-3">
-                      {/* P0: hiện calls_this_month (quota tháng này) và calls_used (tổng) */}
+                      {/* P0: show calls_this_month and calls_used (total) */}
                       <div className="text-gray-700 text-sm font-mono">{k.calls_this_month ?? 0}</div>
-                      <div className="text-gray-400 text-xs">/ {k.calls_used ?? 0} tổng</div>
-                      {/* P0: progress bar dùng calls_this_month so với quota tháng */}
+                      <div className="text-gray-400 text-xs">/ {k.calls_used ?? 0} total</div>
+                      {/* P0: progress bar using calls_this_month vs monthly quota */}
                       {k.quota_per_month && (
                         <div style={{ marginTop: 3, height: 3, background: "#e5e7eb", borderRadius: 99 }}>
                           <div style={{
@@ -987,17 +987,16 @@ function SectionApiKeys() {
                     </td>
                     <td className="px-5 py-3">
                       <div className="flex gap-1 flex-wrap">
-                        {/* P2: nút chỉnh sửa quota/note */}
-                        <ActionBtn onClick={() => setEditKey(k)} disabled={!!busy} color="indigo">
-                          Sửa
-                        </ActionBtn>
+                        {/* P2: edit quota/note button */}
+                        <ActionBtn onClick={() => setEditKey(k)} disabled={!!busy} color="indigo">Edit
+          </ActionBtn>
                         {k.status === "active" && (
                           <ActionBtn onClick={() => revokeKey(k)} disabled={!!busy} color="amber">
-                            {busy === k.id + "_revoke" ? "..." : "Thu hồi"}
+                            {busy === k.id + "_revoke" ? "..." : "Revoke"}
                           </ActionBtn>
                         )}
                         <ActionBtn onClick={() => deleteKey(k)} disabled={!!busy} color="red">
-                          {busy === k.id + "_delete" ? "..." : "Xóa"}
+                          {busy === k.id + "_delete" ? "..." : "Delete"}
                         </ActionBtn>
                       </div>
                     </td>
@@ -1006,17 +1005,17 @@ function SectionApiKeys() {
               })}
             </tbody>
           </table>
-          {keys.length === 0 && <EmptyBox text="Chưa có API key nào. Nhấn '+ Tạo API Key' để bắt đầu." />}
+          {keys.length === 0 && <EmptyBox text="No API keys yet. Click '+ Create API Key' to get started." />}
         </div>
       )}
 
       {/* Docs */}
       <div className="mt-6 rounded-2xl bg-white shadow p-5">
-        <h3 className="text-sm font-semibold text-gray-900 mb-1">📖 Hướng dẫn gọi API</h3>
-        <p className="text-xs text-gray-500 mb-3">Truyền API key qua header <code style={{ background: "#f3f4f6", padding: "1px 5px", borderRadius: 4 }}>X-API-Key</code></p>
+        <h3 className="text-sm font-semibold text-gray-900 mb-1">API Usage Guide</h3>
+        <p className="text-xs text-gray-500 mb-3">Pass your API key via the header <code style={{ background: "#f3f4f6", padding: "1px 5px", borderRadius: 4 }}>X-API-Key</code></p>
         <div style={{ background: "#0d0d0d", borderRadius: 8, padding: "14px 16px", fontFamily: "monospace", fontSize: 11.5, color: "#ccc", lineHeight: 2, overflowX: "auto" }}>
 
-          <div style={{ color: "#888", marginBottom: 2 }}># Stage 1 — Tạo white mesh</div>
+          <div style={{ color: "#888", marginBottom: 2 }}># Stage 1 — Generate white mesh</div>
           <div>
             <span style={{ color: "#7c6ef5" }}>curl -X POST</span>{" "}
             <span style={{ color: "#34d399" }}>https://api.example.com/api/v1/generate-shape-mv/upload</span>{" \\"}
@@ -1031,13 +1030,13 @@ function SectionApiKeys() {
             <span style={{ color: "#fbbf24" }}>-F</span> <span style={{ color: "#f9a8d4" }}>"back=@back.png"</span>
           </div>
 
-          <div style={{ color: "#888", marginTop: 10, marginBottom: 2 }}># Theo dõi tiến trình Stage 1 (SSE)</div>
+          <div style={{ color: "#888", marginTop: 10, marginBottom: 2 }}># Track Stage 1 progress (SSE)</div>
           <div>
             <span style={{ color: "#7c6ef5" }}>curl</span>{" "}
             <span style={{ color: "#34d399" }}>{"https://api.example.com/api/v1/job-progress-sse/{job_id}"}</span>
           </div>
 
-          <div style={{ color: "#888", marginTop: 10, marginBottom: 2 }}># Stage 2 — Sơn texture (server tự lấy ảnh từ Stage 1)</div>
+          <div style={{ color: "#888", marginTop: 10, marginBottom: 2 }}># Stage 2 — Apply texture (server fetches images from Stage 1)</div>
           <div>
             <span style={{ color: "#7c6ef5" }}>curl -X POST</span>{" "}
             <span style={{ color: "#34d399" }}>https://api.example.com/api/v1/generate-texture-mv</span>{" \\"}
@@ -1052,13 +1051,13 @@ function SectionApiKeys() {
             <span style={{ color: "#fbbf24" }}>-d</span> <span style={{ color: "#f9a8d4" }}>'{"{"}"shape_job_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", "texture_4k": true{"}"}'</span>
           </div>
 
-          <div style={{ color: "#888", marginTop: 10, marginBottom: 2 }}># Theo dõi tiến trình Stage 2 (SSE)</div>
+          <div style={{ color: "#888", marginTop: 10, marginBottom: 2 }}># Track Stage 2 progress (SSE)</div>
           <div>
             <span style={{ color: "#7c6ef5" }}>curl</span>{" "}
             <span style={{ color: "#34d399" }}>{"https://api.example.com/api/v1/job-progress-sse/{job_id}"}</span>
           </div>
 
-          <div style={{ color: "#888", marginTop: 10, marginBottom: 2 }}># Download kết quả</div>
+          <div style={{ color: "#888", marginTop: 10, marginBottom: 2 }}># Download output</div>
           <div>
             <span style={{ color: "#7c6ef5" }}>curl -O</span>{" "}
             <span style={{ color: "#34d399" }}>{"https://api.example.com/api/v1/download/{job_id}/white"}</span>
@@ -1077,7 +1076,7 @@ function SectionApiKeys() {
         />
       )}
 
-      {/* P2: modal chỉnh sửa key */}
+      {/* P2: key edit modal */}
       {editKey && (
         <CreateKeyModal
           editKey={editKey}
@@ -1110,11 +1109,11 @@ function CreateKeyModal({ onClose, onCreated, editKey }) {
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const handleSubmit = async () => {
-    if (!form.name.trim()) { setError("Vui lòng nhập tên key"); return }
+    if (!form.name.trim()) { setError("Please enter a key name"); return }
     setLoading(true); setError("")
     try {
       if (isEdit) {
-        // P2: gọi updateApiKey thay vì POST
+        // P2: call updateApiKey instead of POST
         await updateApiKey(editKey.id, {
           name:            form.name.trim(),
           quota_per_month: form.quota_per_month ? parseInt(form.quota_per_month) : null,
@@ -1133,7 +1132,7 @@ function CreateKeyModal({ onClose, onCreated, editKey }) {
         setNewKey(res.data)
       }
     } catch (e) {
-      setError(e.response?.data?.detail || (isEdit ? "Cập nhật thất bại" : "Tạo key thất bại"))
+      setError(e.response?.data?.detail || (isEdit ? "Update failed" : "Failed to create key"))
     } finally { setLoading(false) }
   }
 
@@ -1158,34 +1157,34 @@ function CreateKeyModal({ onClose, onCreated, editKey }) {
         {!newKey ? (
           <>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <h2 style={{ fontSize: 16, fontWeight: 500, margin: 0 }}>{isEdit ? `Chỉnh sửa: ${editKey.name}` : "Tạo API Key mới"}</h2>
+              <h2 style={{ fontSize: 16, fontWeight: 500, margin: 0 }}>{isEdit ? `Edit: ${editKey.name}` : "Create New API Key"}</h2>
               <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: "#999" }}>✕</button>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <FormField label="Tên key *" hint='Ví dụ: "Mobile App", "Studio X"'>
-                <input type="text" placeholder="Đặt tên để nhận biết key..." value={form.name}
+              <FormField label="Key Name *" hint='e.g. "Mobile App", "Studio X"'>
+                <input type="text" placeholder="Enter a name to identify this key..." value={form.name}
                   onChange={e => set("name", e.target.value)} style={inputStyle} />
               </FormField>
-              {/* Email chủ key chỉ hiện khi tạo mới, không cho đổi sau */}
+              {/* Owner email is only shown on creation, cannot be changed later */}
               {!isEdit && (
-                <FormField label="Email chủ key" hint="Người được cấp key (không bắt buộc)">
+                <FormField label="Key Owner Email" hint="Person receiving the key (optional)">
                   <input type="email" placeholder="developer@example.com" value={form.owner_email}
                     onChange={e => set("owner_email", e.target.value)} style={inputStyle} />
                 </FormField>
               )}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <FormField label="Quota / tháng" hint="Để trống = không giới hạn">
-                  <input type="number" min={1} placeholder="VD: 1000" value={form.quota_per_month}
+                <FormField label="Monthly Quota" hint="Leave blank for unlimited">
+                  <input type="number" min={1} placeholder="e.g. 1000" value={form.quota_per_month}
                     onChange={e => set("quota_per_month", e.target.value)} style={inputStyle} />
                 </FormField>
-                <FormField label="Hết hạn" hint="Để trống = vĩnh viễn">
+                <FormField label="Expiry Date" hint="Leave blank for no expiry">
                   <input type="date" value={form.expires_at}
                     onChange={e => set("expires_at", e.target.value)} style={inputStyle} />
                 </FormField>
               </div>
-              <FormField label="Ghi chú">
-                <textarea placeholder="Mục đích sử dụng..." value={form.note} rows={2}
+              <FormField label="Notes">
+                <textarea placeholder="Purpose or usage notes..." value={form.note} rows={2}
                   onChange={e => set("note", e.target.value)} style={{ ...inputStyle, resize: "vertical" }} />
               </FormField>
             </div>
@@ -1197,7 +1196,7 @@ function CreateKeyModal({ onClose, onCreated, editKey }) {
                 flex: 1, padding: "10px", borderRadius: 10, border: "1px solid #e5e7eb",
                 background: "none", color: "#666", fontSize: 13, cursor: "pointer",
                 fontFamily: "'DM Sans', sans-serif",
-              }}>Hủy</button>
+              }}>Cancel</button>
               <button onClick={handleSubmit} disabled={loading} style={{
                 flex: 2, padding: "10px",
                 background: "linear-gradient(135deg, #7c6ef5, #5650cc)",
@@ -1205,18 +1204,18 @@ function CreateKeyModal({ onClose, onCreated, editKey }) {
                 fontSize: 13, fontWeight: 500, cursor: loading ? "not-allowed" : "pointer",
                 opacity: loading ? 0.7 : 1, fontFamily: "'DM Sans', sans-serif",
               }}>
-                {loading ? (isEdit ? "Đang lưu..." : "Đang tạo...") : (isEdit ? "Lưu thay đổi" : "Tạo API Key")}
+                {loading ? (isEdit ? "Saving..." : "Creating...") : (isEdit ? "Save Changes" : "Create API Key")}
               </button>
             </div>
           </>
         ) : (
           <>
             <div style={{ textAlign: "center", marginBottom: 20 }}>
-              <div style={{ fontSize: 36, marginBottom: 8 }}>🎉</div>
-              <h2 style={{ fontSize: 16, fontWeight: 500, margin: "0 0 4px" }}>API Key đã được tạo!</h2>
+              
+              <h2 style={{ fontSize: 16, fontWeight: 500, margin: "0 0 4px" }}>API Key Created!</h2>
               <p style={{ fontSize: 13, color: "#888" }}>
-                Sao chép và gửi key cho người dùng.<br />
-                <strong style={{ color: "#ef4444" }}>Key chỉ hiển thị một lần duy nhất.</strong>
+                Copy and share the key with the recipient.<br />
+                <strong style={{ color: "#ef4444" }}>The key is shown only once.</strong>
               </p>
             </div>
             <div style={{
@@ -1232,19 +1231,19 @@ function CreateKeyModal({ onClose, onCreated, editKey }) {
                 border: "none", borderRadius: 6, padding: "5px 12px",
                 fontSize: 12, cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
                 whiteSpace: "nowrap", flexShrink: 0,
-              }}>{copied ? "✓ Đã copy!" : "Copy key"}</button>
+              }}>{copied ? "Copied!" : "Copy Key"}</button>
             </div>
             <div style={{ fontSize: 12, color: "#888", lineHeight: 1.7, marginBottom: 20 }}>
-              <div>📛 Tên: <strong style={{ color: "#333" }}>{newKey.name}</strong></div>
-              {newKey.owner_email && <div>📧 Owner: <strong style={{ color: "#333" }}>{newKey.owner_email}</strong></div>}
-              {newKey.quota_per_month && <div>📊 Quota: <strong style={{ color: "#333" }}>{newKey.quota_per_month} calls/tháng</strong></div>}
-              {newKey.expires_at && <div>📅 Hết hạn: <strong style={{ color: "#333" }}>{newKey.expires_at}</strong></div>}
+              <div>Name: <strong style={{ color: "#333" }}>{newKey.name}</strong></div>
+              {newKey.owner_email && <div>Owner: <strong style={{ color: "#333" }}>{newKey.owner_email}</strong></div>}
+              {newKey.quota_per_month && <div>Quota: <strong style={{ color: "#333" }}>{newKey.quota_per_month} calls/month</strong></div>}
+              {newKey.expires_at && <div>Expires: <strong style={{ color: "#333" }}>{newKey.expires_at}</strong></div>}
             </div>
             <button onClick={() => onCreated(newKey)} style={{
               width: "100%", padding: "10px", background: "#f3f4f6", border: "none",
               borderRadius: 10, fontSize: 13, color: "#555", cursor: "pointer",
               fontFamily: "'DM Sans', sans-serif",
-            }}>Đóng</button>
+            }}>Close</button>
           </>
         )}
       </div>
@@ -1261,17 +1260,17 @@ function SubmissionCard({ sub, busy, showStatus, children }) {
       <div className="relative h-44 bg-gray-100 flex items-center justify-center overflow-hidden">
         {sub.image_url
           ? <img src={sub.image_url} alt={sub.model_name} className="w-full h-full object-cover" />
-          : <span className="text-5xl">🗂</span>
+          : <span className="text-5xl"></span>
         }
         {showStatus && (
           <span className={`absolute top-2 right-2 rounded-full px-2 py-0.5 text-xs font-semibold ${
             sub.is_public ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
-          }`}>{sub.is_public ? "✓ Public" : "⏳ Pending"}</span>
+          }`}>{sub.is_public ? "Public" : "Pending"}</span>
         )}
       </div>
       <div className="p-4 flex flex-col flex-1">
         <h3 className="font-semibold text-gray-900 truncate">{sub.model_name}</h3>
-        <p className="mt-1 text-sm text-gray-500">👤 {sub.user} · {sub.created_at}</p>
+        <p className="mt-1 text-sm text-gray-500">{sub.user} · {sub.created_at}</p>
         {sub.categories?.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1">
             {sub.categories.map(c => (
@@ -1279,10 +1278,10 @@ function SubmissionCard({ sub, busy, showStatus, children }) {
             ))}
           </div>
         )}
-        {sub.tags && <p className="mt-1 text-xs text-gray-400 truncate">🏷 {sub.tags}</p>}
+        {sub.tags && <p className="mt-1 text-xs text-gray-400 truncate">{sub.tags}</p>}
         {sub.model_url && (
           <a href={sub.model_url} target="_blank" rel="noreferrer" className="mt-2 text-xs text-indigo-600 hover:underline">
-            📦 Xem file 3D
+            View 3D File
           </a>
         )}
         <div className="mt-auto pt-4 flex gap-2">{children}</div>
@@ -1319,7 +1318,7 @@ function StatCard({ title, value, color, icon }) {
 function QuickCard({ title, desc, icon }) {
   return (
     <div style={{ background: "#fff", borderRadius: 16, padding: "20px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", border: "1px solid #f0f0f0" }}>
-      <div style={{ fontSize: 20, marginBottom: 8 }}>{icon}</div>
+      
       <div style={{ fontSize: 14, fontWeight: 500, color: "#111", marginBottom: 4 }}>{title}</div>
       <div style={{ fontSize: 12, color: "#888" }}>{desc}</div>
     </div>
@@ -1349,7 +1348,7 @@ function ApiKeyStatusBadge({ status }) {
 
 function StatusBadge({ status }) {
   const map   = { completed:"bg-emerald-100 text-emerald-700", processing:"bg-amber-100 text-amber-700", failed:"bg-red-100 text-red-700", pending:"bg-gray-100 text-gray-500" }
-  const label = { completed:"Hoàn thành", processing:"Đang xử lý", failed:"Thất bại", pending:"Chờ" }
+  const label = { completed:"Completed", processing:"Processing", failed:"Failed", pending:"Pending" }
   return <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${map[status] || "bg-gray-100 text-gray-500"}`}>{label[status] || status}</span>
 }
 
@@ -1406,7 +1405,7 @@ function PageBtn({ onClick, disabled, children }) {
 }
 
 function LoadingBox() {
-  return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 160, color: "#aaa", fontSize: 13 }}>Đang tải...</div>
+  return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 160, color: "#aaa", fontSize: 13 }}>Loading...</div>
 }
 
 function EmptyBox({ text }) {

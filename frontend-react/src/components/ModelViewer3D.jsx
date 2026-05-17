@@ -266,6 +266,7 @@ function applyShaderToScene(scene, style, originalMaterials) {
 
 export default function ModelViewer3D({
   src,
+  fileExt = null,   // Fix 3: ext thực tế khi src là blob URL (không có đuôi file)
   style = "default",
   autoRotate = true,
   interactive = true,
@@ -293,6 +294,7 @@ export default function ModelViewer3D({
   const pmremRef     = useRef(null)
   const envMapRef    = useRef(null)
   const lightsRef    = useRef({})   // { ambient, key, fill, back, bottom }
+  const currentModelRef = useRef(null)  // Fix 4: track model hiện tại để dispose khi swap
 
   // ENV preset configs — chỉ điều chỉnh lights, không cần HTTP
   const ENV_PRESETS = {
@@ -459,9 +461,9 @@ export default function ModelViewer3D({
     })
   }, [pbr, metallic, roughness])
 
-  // Setup scene một lần
+  // ── Fix 4: Setup scene MỘT LẦN (không phụ thuộc src) ───────────────────
   useEffect(() => {
-    if (!src || !mountRef.current) return
+    if (!mountRef.current) return
     const mount = mountRef.current
     const w = mount.clientWidth
     const h = mount.clientHeight
@@ -524,8 +526,109 @@ export default function ModelViewer3D({
       controlsRef.current = controls
     }
 
-    // Load model theo format
-    const ext = src.split("?")[0].split(".").pop().toLowerCase()
+    // Animate loop
+    const clock = clockRef.current
+    const animate = () => {
+      animFrameRef.current = requestAnimationFrame(animate)
+      const delta = clock.getDelta()
+
+      if (mixerRef.current) mixerRef.current.update(delta)
+      if (controlsRef.current) controlsRef.current.update()
+
+      // Update hologram time uniform
+      if (styleRef.current === "hologram" && sceneRef.current) {
+        const t = clock.getElapsedTime()
+        sceneRef.current.traverse(obj => {
+          if (obj.isMesh && obj.material?.uniforms?.uTime) {
+            obj.material.uniforms.uTime.value = t
+          }
+        })
+      }
+
+      // Auto rotate nếu không có controls
+      if (!interactive && sceneRef.current) {
+        sceneRef.current.rotation.y += delta * 0.5
+      }
+
+      // Env auto-rotate → xoay environment + lights
+      if (envAutoRotateRef.current && sceneRef.current) {
+        const sc = sceneRef.current
+        const step = delta * 0.6
+        if (sc.environmentRotation !== undefined) {
+          sc.environmentRotation.y += step
+        }
+        const lights = lightsRef.current
+        const s = Math.sin(step), c = Math.cos(step)
+        ;[lights.key, lights.fill, lights.back, lights.bottom].forEach(l => {
+          if (!l) return
+          const x = l.position.x, z = l.position.z
+          l.position.x = x * c + z * s
+          l.position.z = -x * s + z * c
+        })
+      }
+
+      // Sync quaternion camera ra ngoài cho gizmo
+      if (cameraQuatRef) {
+        const q = camera.quaternion
+        cameraQuatRef.current = { x: q.x, y: q.y, z: q.z, w: q.w }
+      }
+
+      renderer.render(scene, camera)
+    }
+    animate()
+
+    // Resize handler
+    const onResize = () => {
+      const nw = mount.clientWidth
+      const nh = mount.clientHeight
+      camera.aspect = nw / nh
+      camera.updateProjectionMatrix()
+      renderer.setSize(nw, nh)
+    }
+    window.addEventListener("resize", onResize)
+
+    return () => {
+      window.removeEventListener("resize", onResize)
+      cancelAnimationFrame(animFrameRef.current)
+      if (controlsRef.current) controlsRef.current.dispose()
+      if (gridRef.current) {
+        gridRef.current.geometry?.dispose()
+        gridRef.current.material?.dispose()
+        gridRef.current = null
+      }
+      renderer.dispose()
+      if (mount.contains(renderer.domElement)) {
+        mount.removeChild(renderer.domElement)
+      }
+      origMatsRef.current.clear()
+      if (pmremRef.current) { pmremRef.current.dispose(); pmremRef.current = null }
+      if (envMapRef.current) { envMapRef.current.dispose(); envMapRef.current = null }
+    }
+  }, [])  // Fix 4: chạy một lần duy nhất khi mount
+
+  // ── Fix 4: Load / swap model khi src thay đổi — không rebuild scene ─────
+  useEffect(() => {
+    if (!src || !sceneRef.current) return
+    const scene = sceneRef.current
+
+    // Dispose model cũ trước khi load model mới
+    if (currentModelRef.current) {
+      const { model: oldModel, mixer: oldMixer } = currentModelRef.current
+      scene.remove(oldModel)
+      oldModel.traverse(obj => {
+        if (obj.isMesh) {
+          obj.geometry?.dispose()
+          if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose())
+          else obj.material?.dispose()
+        }
+      })
+      if (oldMixer) { oldMixer.stopAllAction(); oldMixer.uncacheRoot(oldModel) }
+      currentModelRef.current = null
+    }
+    mixerRef.current = null
+    origMatsRef.current.clear()
+
+    let loadCancelled = false  // abort nếu src đổi trước khi load xong
 
     // Convert bất kỳ material nào → MeshStandardMaterial để PBR/shading hoạt động
     const convertToStandard = (obj) => {
@@ -535,9 +638,7 @@ export default function ModelViewer3D({
         const converted = mats.map(m => {
           if (m.isMeshStandardMaterial) return m
           const std = new THREE.MeshStandardMaterial()
-          // Copy màu
           if (m.color) std.color.copy(m.color)
-          // Copy texture maps
           if (m.map)          std.map = m.map
           if (m.normalMap)    std.normalMap = m.normalMap
           if (m.aoMap)        std.aoMap = m.aoMap
@@ -545,19 +646,12 @@ export default function ModelViewer3D({
           if (m.emissive)     std.emissive.copy(m.emissive)
           if (m.alphaMap)     std.alphaMap = m.alphaMap
           if (m.side !== undefined) std.side = m.side
-          // PBR defaults hợp lý — không quá tối
           std.roughness = 0.6
           std.metalness = 0.05
-          // Boost màu nếu quá tối (MeshPhong thường render tối hơn MeshStandard)
           const lum = std.color.r * 0.299 + std.color.g * 0.587 + std.color.b * 0.114
           if (lum < 0.08 && !std.map) {
             std.color.setHex(0x888888)
           }
-
-          // ── Transparency ────────────────────────────────────────────────
-          // Chỉ set transparent=true nếu thực sự có opacity < 1 (vd: kính, lá cây)
-          // Tuyệt đối KHÔNG copy transparent=true từ MTLLoader vì MTLLoader
-          // tự set transparent=true khi PNG có alpha channel → model bị trong suốt.
           const hasRealOpacity = m.opacity !== undefined && m.opacity < 0.99
           if (hasRealOpacity && m.alphaMap) {
             std.transparent = true
@@ -566,12 +660,6 @@ export default function ModelViewer3D({
             std.transparent = false
             std.opacity = 1
             std.depthWrite = true
-            // ── Override fragment shader để force alpha=1 ra canvas ────────
-            // Vấn đề: renderer dùng alpha:true (canvas trong suốt), Three.js
-            // MeshStandardMaterial vẫn output texture alpha vào gl_FragColor.a
-            // dù transparent=false → PNG có alpha channel → canvas pixel alpha=0
-            // → browser thấy trong suốt qua page background.
-            // Fix: append gl_FragColor.a = 1.0 sau tất cả shader processing.
             std.onBeforeCompile = (shader) => {
               shader.fragmentShader = shader.fragmentShader.replace(
                 '#include <dithering_fragment>',
@@ -579,7 +667,6 @@ export default function ModelViewer3D({
               )
             }
           }
-
           m.dispose()
           return std
         })
@@ -589,6 +676,18 @@ export default function ModelViewer3D({
     }
 
     const onModelLoaded = (model, animations = []) => {
+      if (loadCancelled) {
+        // Dispose model bị cancel để tránh memory leak
+        model.traverse(obj => {
+          if (obj.isMesh) {
+            obj.geometry?.dispose()
+            if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose())
+            else obj.material?.dispose()
+          }
+        })
+        return
+      }
+
       // Center và scale
       const box = new THREE.Box3().setFromObject(model)
       const center = box.getCenter(new THREE.Vector3())
@@ -607,9 +706,7 @@ export default function ModelViewer3D({
         mixerRef.current = mixer
       }
 
-      // ── Apply PBR metallic/roughness ngay sau khi model vào scene ──────────
-      // PBR useEffect chạy lúc mount (scene còn trống) nên không catch được
-      // model load async → cần apply lại ở đây
+      // Apply PBR metallic/roughness ngay sau khi model vào scene
       model.traverse(obj => {
         if (obj.isMesh && obj.material) {
           const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
@@ -627,7 +724,13 @@ export default function ModelViewer3D({
       applyShaderToScene(scene, styleRef.current, origMatsRef.current)
       // Apply environment preset sau khi model vào scene
       _applyPreset(environmentRef.current ?? "studio", envStrengthRef.current)
+
+      currentModelRef.current = { model, mixer: mixerRef.current }
     }
+
+    // Fix 3: ưu tiên fileExt prop (khi src là blob URL không có đuôi)
+    const rawExt = src.split("?")[0].split(".").pop().toLowerCase()
+    const ext = fileExt ?? (/^(glb|gltf|obj|stl)$/.test(rawExt) ? rawExt : "glb")
 
     if (ext === "obj") {
       const defaultMat = new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.6, metalness: 0.05 })
@@ -638,14 +741,12 @@ export default function ModelViewer3D({
           if (!materials) {
             obj.traverse(child => { if (child.isMesh) child.material = defaultMat })
           } else {
-            // Convert MeshPhongMaterial → MeshStandardMaterial
             convertToStandard(obj)
           }
           onModelLoaded(obj)
         }, undefined, err => console.error("OBJLoader error:", err))
       }
 
-      // Thử load .mtl cùng tên, fallback về material xám nếu không có
       const mtlUrl = src.replace(/\.obj(\?.*)?$/i, ".mtl")
       const resourcePath = src.substring(0, src.lastIndexOf('/') + 1)
       const mtlLoader = new MTLLoader()
@@ -686,93 +787,10 @@ export default function ModelViewer3D({
       }, undefined, err => console.error("GLTFLoader error:", err))
     }
 
-    // Animate loop
-    const clock = clockRef.current
-    const animate = () => {
-      animFrameRef.current = requestAnimationFrame(animate)
-      const delta = clock.getDelta()
-
-      if (mixerRef.current) mixerRef.current.update(delta)
-      if (controlsRef.current) controlsRef.current.update()
-
-      // Update hologram time uniform
-      if (styleRef.current === "hologram" && sceneRef.current) {
-        const t = clock.getElapsedTime()
-        sceneRef.current.traverse(obj => {
-          if (obj.isMesh && obj.material?.uniforms?.uTime) {
-            obj.material.uniforms.uTime.value = t
-          }
-        })
-      }
-
-      // Auto rotate nếu không có controls
-      if (!interactive && sceneRef.current) {
-        sceneRef.current.rotation.y += delta * 0.5
-      }
-
-      // Env auto-rotate → xoay environment + lights
-      if (envAutoRotateRef.current && sceneRef.current) {
-        const scene = sceneRef.current
-        const step = delta * 0.6
-        if (scene.environmentRotation !== undefined) {
-          scene.environmentRotation.y += step
-        }
-        const lights = lightsRef.current
-        const s = Math.sin(step), c = Math.cos(step)
-        ;[lights.key, lights.fill, lights.back, lights.bottom].forEach(l => {
-          if (!l) return
-          const x = l.position.x, z = l.position.z
-          l.position.x = x * c + z * s
-          l.position.z = -x * s + z * c
-        })
-      }
-
-      // Sync quaternion camera ra ngoài cho gizmo
-      if (cameraQuatRef) {
-        const q = camera.quaternion
-        cameraQuatRef.current = { x: q.x, y: q.y, z: q.z, w: q.w }
-      }
-
-      renderer.render(scene, camera)
-    }
-    animate()
-
-    // Resize handler
-    const onResize = () => {
-      const w = mount.clientWidth
-      const h = mount.clientHeight
-      camera.aspect = w / h
-      camera.updateProjectionMatrix()
-      renderer.setSize(w, h)
-    }
-    window.addEventListener("resize", onResize)
-
     return () => {
-      window.removeEventListener("resize", onResize)
-      cancelAnimationFrame(animFrameRef.current)
-      if (controlsRef.current) controlsRef.current.dispose()
-      if (gridRef.current) {
-        gridRef.current.geometry?.dispose()
-        gridRef.current.material?.dispose()
-        gridRef.current = null
-      }
-      renderer.dispose()
-      if (mount.contains(renderer.domElement)) {
-        mount.removeChild(renderer.domElement)
-      }
-      // Dispose materials
-      scene.traverse(obj => {
-        if (obj.isMesh) {
-          obj.geometry?.dispose()
-          if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose())
-          else obj.material?.dispose()
-        }
-      })
-      origMatsRef.current.clear()
-      if (pmremRef.current) { pmremRef.current.dispose(); pmremRef.current = null }
-      if (envMapRef.current) { envMapRef.current.dispose(); envMapRef.current = null }
+      loadCancelled = true  // Fix 4: huỷ load nếu src đổi trước khi loader callback
     }
-  }, [src]) // chỉ re-mount khi src thay đổi
+  }, [src, fileExt])  // Fix 4: chỉ chạy lại khi src hoặc fileExt thay đổi
 
   return (
     <div
