@@ -971,9 +971,9 @@ function SectionApiKeys() {
                       {k.quota_per_month == null ? "Unlimited" : `${k.quota_per_month} calls`}
                     </td>
                     <td className="px-5 py-3">
-                      {/* P0: show calls_this_month and calls_used (total) */}
+                      {/* P0: show calls_this_month vs monthly quota */}
                       <div className="text-gray-700 text-sm font-mono">{k.calls_this_month ?? 0}</div>
-                      <div className="text-gray-400 text-xs">/ {k.calls_used ?? 0} total</div>
+                      <div className="text-gray-400 text-xs">/ {k.quota_per_month ?? "∞"} quota</div>
                       {/* P0: progress bar using calls_this_month vs monthly quota */}
                       {k.quota_per_month && (
                         <div style={{ marginTop: 3, height: 3, background: "#e5e7eb", borderRadius: 99 }}>
@@ -1015,6 +1015,7 @@ function SectionApiKeys() {
         <p className="text-xs text-gray-500 mb-3">Pass your API key via the header <code style={{ background: "#f3f4f6", padding: "1px 5px", borderRadius: 4 }}>X-API-Key</code></p>
         <div style={{ background: "#0d0d0d", borderRadius: 8, padding: "14px 16px", fontFamily: "monospace", fontSize: 11.5, color: "#ccc", lineHeight: 2, overflowX: "auto" }}>
 
+          {/* Stage 1 */}
           <div style={{ color: "#888", marginBottom: 2 }}># Stage 1 — Generate white mesh</div>
           <div>
             <span style={{ color: "#7c6ef5" }}>curl -X POST</span>{" "}
@@ -1024,19 +1025,27 @@ function SectionApiKeys() {
             <span style={{ color: "#fbbf24" }}>-H</span> <span style={{ color: "#f9a8d4" }}>"X-API-Key: sk_live_xxxx...abcd"</span>{" \\"}
           </div>
           <div style={{ paddingLeft: 16 }}>
-            <span style={{ color: "#fbbf24" }}>-F</span> <span style={{ color: "#f9a8d4" }}>"front=@front.png"</span>{" "}
-            <span style={{ color: "#fbbf24" }}>-F</span> <span style={{ color: "#f9a8d4" }}>"left=@left.png"</span>{" "}
-            <span style={{ color: "#fbbf24" }}>-F</span> <span style={{ color: "#f9a8d4" }}>"right=@right.png"</span>{" "}
-            <span style={{ color: "#fbbf24" }}>-F</span> <span style={{ color: "#f9a8d4" }}>"back=@back.png"</span>
+            <span style={{ color: "#fbbf24" }}>-F</span> <span style={{ color: "#f9a8d4" }}>"front=@front.jpeg"</span>{" "}
+            <span style={{ color: "#fbbf24" }}>-F</span> <span style={{ color: "#f9a8d4" }}>"left=@left.jpeg"</span>{" "}
+            <span style={{ color: "#fbbf24" }}>-F</span> <span style={{ color: "#f9a8d4" }}>"right=@right.jpeg"</span>{" "}
+            <span style={{ color: "#fbbf24" }}>-F</span> <span style={{ color: "#f9a8d4" }}>"back=@back.jpeg"</span>
           </div>
+          <div style={{ color: "#6ee7b7", marginTop: 4 }}>{`→ Returns: { "job_id": "<shape_job_id>" }`}</div>
 
-          <div style={{ color: "#888", marginTop: 10, marginBottom: 2 }}># Track Stage 1 progress (SSE)</div>
+          <div style={{ color: "#888", marginTop: 10, marginBottom: 2 }}># Track Stage 1 progress (SSE stream)</div>
           <div>
             <span style={{ color: "#7c6ef5" }}>curl</span>{" "}
-            <span style={{ color: "#34d399" }}>{"https://api.example.com/api/v1/job-progress-sse/{job_id}"}</span>
+            <span style={{ color: "#34d399" }}>{"https://api.example.com/api/v1/job-progress-sse/{shape_job_id}"}</span>
           </div>
 
-          <div style={{ color: "#888", marginTop: 10, marginBottom: 2 }}># Stage 2 — Apply texture (server fetches images from Stage 1)</div>
+          <div style={{ color: "#888", marginTop: 10, marginBottom: 2 }}># Download white mesh — use shape_job_id (Stage 1)</div>
+          <div>
+            <span style={{ color: "#7c6ef5" }}>curl -O</span>{" "}
+            <span style={{ color: "#34d399" }}>{"https://api.example.com/api/v1/download/{shape_job_id}/white"}</span>
+          </div>
+
+          {/* Stage 2 */}
+          <div style={{ color: "#888", marginTop: 14, marginBottom: 2 }}># Stage 2 — Apply texture</div>
           <div>
             <span style={{ color: "#7c6ef5" }}>curl -X POST</span>{" "}
             <span style={{ color: "#34d399" }}>https://api.example.com/api/v1/generate-texture-mv</span>{" \\"}
@@ -1048,23 +1057,39 @@ function SectionApiKeys() {
             <span style={{ color: "#fbbf24" }}>-H</span> <span style={{ color: "#f9a8d4" }}>"Content-Type: application/json"</span>{" \\"}
           </div>
           <div style={{ paddingLeft: 16 }}>
-            <span style={{ color: "#fbbf24" }}>-d</span> <span style={{ color: "#f9a8d4" }}>'{"{"}"shape_job_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", "texture_4k": true{"}"}'</span>
+            <span style={{ color: "#fbbf24" }}>-d</span> <span style={{ color: "#f9a8d4" }}>{`'{"shape_job_id": "<shape_job_id>", "texture_4k": true}'`}</span>
           </div>
+          <div style={{ color: "#6ee7b7", marginTop: 4 }}>{`→ Returns: { "job_id": "<texture_job_id>" }`}</div>
 
-          <div style={{ color: "#888", marginTop: 10, marginBottom: 2 }}># Track Stage 2 progress (SSE)</div>
+          <div style={{ color: "#888", marginTop: 10, marginBottom: 2 }}># Track Stage 2 progress (SSE stream)</div>
           <div>
             <span style={{ color: "#7c6ef5" }}>curl</span>{" "}
-            <span style={{ color: "#34d399" }}>{"https://api.example.com/api/v1/job-progress-sse/{job_id}"}</span>
+            <span style={{ color: "#34d399" }}>{"https://api.example.com/api/v1/job-progress-sse/{texture_job_id}"}</span>
           </div>
 
-          <div style={{ color: "#888", marginTop: 10, marginBottom: 2 }}># Download output</div>
+          <div style={{ color: "#888", marginTop: 10, marginBottom: 2 }}># Download textured model — use texture_job_id (Stage 2)</div>
           <div>
             <span style={{ color: "#7c6ef5" }}>curl -O</span>{" "}
-            <span style={{ color: "#34d399" }}>{"https://api.example.com/api/v1/download/{job_id}/white"}</span>
+            <span style={{ color: "#34d399" }}>{"https://api.example.com/api/v1/download/{texture_job_id}/textured"}</span>
           </div>
+
+          {/* Stage 1+2 combined */}
+          <div style={{ color: "#888", marginTop: 14, marginBottom: 2 }}># Stage 1 + 2 combined — shape &amp; texture in one request</div>
           <div>
-            <span style={{ color: "#7c6ef5" }}>curl -O</span>{" "}
-            <span style={{ color: "#34d399" }}>{"https://api.example.com/api/v1/download/{job_id}/textured"}</span>
+            <span style={{ color: "#7c6ef5" }}>curl -X POST</span>{" "}
+            <span style={{ color: "#34d399" }}>https://api.example.com/api/v1/generate-full-mv/upload</span>{" \\"}
+          </div>
+          <div style={{ paddingLeft: 16 }}>
+            <span style={{ color: "#fbbf24" }}>-H</span> <span style={{ color: "#f9a8d4" }}>"X-API-Key: sk_live_xxxx...abcd"</span>{" \\"}
+          </div>
+          <div style={{ paddingLeft: 16 }}>
+            <span style={{ color: "#fbbf24" }}>-F</span> <span style={{ color: "#f9a8d4" }}>"front=@front.jpeg"</span>{" "}
+            <span style={{ color: "#fbbf24" }}>-F</span> <span style={{ color: "#f9a8d4" }}>"left=@left.jpeg"</span>{" "}
+            <span style={{ color: "#fbbf24" }}>-F</span> <span style={{ color: "#f9a8d4" }}>"right=@right.jpeg"</span>{" "}
+            <span style={{ color: "#fbbf24" }}>-F</span> <span style={{ color: "#f9a8d4" }}>"back=@back.jpeg"</span>{" \\"}
+          </div>
+          <div style={{ paddingLeft: 16 }}>
+            <span style={{ color: "#fbbf24" }}>-F</span> <span style={{ color: "#f9a8d4" }}>"texture_4k=true"</span>
           </div>
         </div>
       </div>

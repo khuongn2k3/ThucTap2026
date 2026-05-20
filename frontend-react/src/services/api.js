@@ -201,14 +201,10 @@ export function openJobSSE(jobId, { onProgress, onCompleted, onFailed, onHeartbe
     es.onerror = () => {
       es.close()
       if (closed) return
-      if (retryCount < MAX_RETRIES) {
-        retryCount++
-        console.warn(`[SSE] Retry ${retryCount}/${MAX_RETRIES}...`)
-        setTimeout(connect, 3000)
-      } else {
-        console.warn("[SSE] Max retries reached, switching to polling...")
-        startPolling()
-      }
+      // Không retry SSE — Cloudflare tunnel không ổn định với SSE reconnect
+      // Chuyển thẳng sang polling
+      console.warn("[SSE] Connection dropped, switching to polling...")
+      startPolling()
     }
   }
 

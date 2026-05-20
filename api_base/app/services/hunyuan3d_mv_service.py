@@ -181,25 +181,8 @@ def _build_mesh_metrics(glb_path: Path, n_samples: int = 10_000) -> Dict[str, An
 
         # ── Chất lượng mesh ───────────────────────────────────────────
         result["euler_number"]            = int(mesh.euler_number)
-        result["num_components"]          = int(len(mesh.split(only_watertight=False)))
-
-        # Degenerate faces (diện tích = 0)
-        areas = mesh.area_faces
-        result["degenerate_faces"]        = int(np.sum(areas < 1e-10))
-
-        # Duplicate faces
-        try:
-            _, unique_idx = np.unique(np.sort(mesh.faces, axis=1), axis=0, return_index=True)
-            result["duplicate_faces"]     = int(len(mesh.faces) - len(unique_idx))
-        except Exception:
-            result["duplicate_faces"]     = None
-
-        # Unreferenced vertices
-        try:
-            referenced = np.unique(mesh.faces)
-            result["unreferenced_vertices"] = int(len(mesh.vertices) - len(referenced))
-        except Exception:
-            result["unreferenced_vertices"] = None
+        # num_components, degenerate_faces, duplicate_faces, unreferenced_vertices
+        # đã bỏ — quá nặng với mesh lớn (400k+ faces gây OOM)
 
         # ── Texture / UV (đọc từ GLB JSON header) ─────────────────────
         try:
@@ -601,6 +584,8 @@ class Hunyuan3DMvService:
         return {
             "job_id": job_id, "status": "pending", "stage": "shape",
             "message": "Stage 1 (shape) đã vào hàng chờ",
+            "eta_shape":   self._get_eta("shape"),
+            "eta_texture": self._get_eta("texture"),
         }
 
     async def _run_shape_bg(self, job_id, images_base64, remove_background,
@@ -656,13 +641,6 @@ class Hunyuan3DMvService:
             metrics = _build_metrics(res_before, res_after, duration)
             self._record_duration("shape", duration)
 
-            # ── Mesh quality metrics (Stage 1) ───────────────────────
-            try:
-                mesh_metrics = _build_mesh_metrics(output_path)
-                metrics["mesh"] = mesh_metrics
-            except Exception as mm_err:
-                print(f"⚠️  [{job_id}] mesh metrics failed: {mm_err}")
-
             output_url = f"{settings.EXTERNAL_URL}/api/v1/download/{job_id}/white"
 
             job = db.query(ModelJob).filter(ModelJob.job_id == job_id).first()
@@ -677,6 +655,9 @@ class Hunyuan3DMvService:
                     thumb_path.write_bytes(thumb_bytes)
                     thumb_url = f"{settings.EXTERNAL_URL}/uploads/thumbnails/{job_id}.webp"
                     if job:
+                        # Backup ảnh gốc vào front_image_url trước khi overwrite
+                        if not job.front_image_url and job.input_image_url:
+                            job.front_image_url = job.input_image_url
                         job.input_image_url = thumb_url
                         db.commit()
                     print(f"🖼️  [{job_id}] Stage 1 thumbnail OK → {thumb_url}")
@@ -823,9 +804,22 @@ class Hunyuan3DMvService:
             ms.save_current_mesh(tmp_out_path)
 
             import trimesh
-            decimated = trimesh.load(tmp_out_path)
+            import numpy as np
+            # process=False để không merge vertices — giữ nguyên topology sau decimate
+            decimated = trimesh.load(tmp_out_path, process=False)
+
+            # pymeshlab đôi khi không ghi vn vào OBJ sau decimate
+            # → NORMAL attribute mất khi export GLB → shader render đen/sai
+            # Fix: force tính lại vertex normals nếu bị mất hoặc toàn 0
+            vn = decimated.vertex_normals  # trigger trimesh lazy computation
+            if vn is None or not np.any(vn):
+                print(f"⚠️  [{job_id}] No normals after decimate — recomputing from faces")
+                decimated.fix_normals()
+            _ = decimated.vertex_normals.copy()  # ensure normals flushed to buffer
+
             actual_faces = len(decimated.faces)
-            print(f"✅ [{job_id}] Decimation done: {actual_faces:,} faces")
+            print(f"✅ [{job_id}] Decimation done: {actual_faces:,} faces | "
+                  f"has_normals={np.any(decimated.vertex_normals)}")
 
             os.unlink(tmp_in_path)
             os.unlink(tmp_out_path)
@@ -913,6 +907,7 @@ class Hunyuan3DMvService:
             "job_id": tex_job_id, "shape_job_id": shape_job_id,
             "status": "pending", "stage": "texture",
             "message": "Stage 2 (texture) đã vào hàng chờ",
+            "eta_texture": self._get_eta("texture"),
         }
 
     async def _run_texture_bg(self, tex_job_id, shape_job_id, front_image_base64, texture_4k=False,
@@ -994,13 +989,6 @@ class Hunyuan3DMvService:
             _log_resources(f"[{tex_job_id}] Stage 2 DONE", res_before, res_after, duration)
             metrics = _build_metrics(res_before, res_after, duration)
             self._record_duration("texture", duration)
-
-            # ── Mesh quality metrics (Stage 2) ───────────────────────
-            try:
-                mesh_metrics = _build_mesh_metrics(output_path)
-                metrics["mesh"] = mesh_metrics
-            except Exception as mm_err:
-                print(f"⚠️  [{tex_job_id}] mesh metrics failed: {mm_err}")
 
             self._unload_texture()
 
@@ -1495,6 +1483,10 @@ class Hunyuan3DMvService:
                 "status":           job.status,
                 "input_image_url":  job.input_image_url,
                 "thumbnail_url":    job.input_image_url,
+                "front_image_url":  job.front_image_url,
+                "left_image_url":   job.left_image_url,
+                "right_image_url":  job.right_image_url,
+                "back_image_url":   job.back_image_url,
                 "output_model_url": job.output_model_url,
                 "has_texture":      job.has_texture,
                 "has_skeleton":     job.has_skeleton,

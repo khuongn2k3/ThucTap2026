@@ -813,6 +813,43 @@ async def download_textured_mesh(job_id: str):
 
 
 # ────────────────────────────────────────────────────────────────────────────
+# Mesh metrics (on-demand)
+# ────────────────────────────────────────────────────────────────────────────
+
+@router.get("/mesh-metrics/{job_id}")
+async def get_mesh_metrics(job_id: str):
+    """
+    ## Tính mesh metrics cho job (on-demand)
+
+    Trả về thông số chất lượng mesh: vertex/face count, watertight, UV, texture...
+
+    Ưu tiên file textured (.glb), fallback về white mesh (.white.glb).
+
+    ```bash
+    curl .../api/v1/mesh-metrics/{job_id}
+    ```
+    """
+    from app.services.hunyuan3d_mv_service import _build_mesh_metrics
+
+    tex_path   = Path(settings.DOWNLOAD_DIR) / f"{job_id}.glb"
+    white_path = Path(settings.DOWNLOAD_DIR) / f"{job_id}.white.glb"
+
+    if tex_path.exists():
+        glb_path = tex_path
+    elif white_path.exists():
+        glb_path = white_path
+    else:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Không tìm thấy GLB file cho job '{job_id}'"
+        )
+
+    loop = asyncio.get_running_loop()
+    metrics = await loop.run_in_executor(None, _build_mesh_metrics, glb_path)
+    return metrics
+
+
+# ────────────────────────────────────────────────────────────────────────────
 # Status / worker
 # ────────────────────────────────────────────────────────────────────────────
 

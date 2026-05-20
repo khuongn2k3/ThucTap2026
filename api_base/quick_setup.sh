@@ -670,12 +670,34 @@ from app.models.user import User
 from app.models.task import ModelJob
 from app.models.payment import Payment
 from app.models.gallery_submission import GallerySubmission
+from sqlalchemy.orm import Session
+
 try:
     Base.metadata.create_all(bind=engine)
     print('✅ Tables created: users, model_jobs, payments, gallery_submissions')
 except Exception as e:
     print(f'❌ Error: {e}')
     exit(1)
+
+# Seed admin user
+try:
+    from app.security import hash_password
+    with Session(engine) as db:
+        exists = db.query(User).filter(User.email == 'admin@gmail.com').first()
+        if not exists:
+            admin = User(
+                name='Admin',
+                email='admin@gmail.com',
+                password=hash_password('123123'),
+                role='admin',
+            )
+            db.add(admin)
+            db.commit()
+            print('✅ Admin created: admin@gmail.com / 123123')
+        else:
+            print('ℹ️  Admin da ton tai, bo qua')
+except Exception as e:
+    print(f'⚠️  Khong the tao admin: {e}')
 "
 
 echo -e "${GREEN}✅ Database initialized${NC}"

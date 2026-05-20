@@ -108,6 +108,11 @@ thumbnails_dir = Path(settings.UPLOAD_TEMP_DIR) / "thumbnails"
 thumbnails_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads/thumbnails", StaticFiles(directory=str(thumbnails_dir)), name="thumbnails")
 
+# MV input images (front/left/right/back)
+mv_dir = Path(settings.UPLOAD_TEMP_DIR) / "mv"
+mv_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads/mv", StaticFiles(directory=str(mv_dir)), name="mv-uploads")
+
 
 # =========================================
 # ROUTERS

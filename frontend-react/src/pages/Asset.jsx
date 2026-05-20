@@ -28,7 +28,13 @@ export default function History() {
         const { uuid, model_name } = res.data
         const slug = `${(model_name || "model").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${uuid}`
         const full = await api.get(`/gallery/by-slug/${slug}`)
-        setSelectedModel(full.data)
+        setSelectedModel({
+          ...full.data,
+          front_image_url: job.front_image_url ?? null,
+          left_image_url:  job.left_image_url  ?? null,
+          right_image_url: job.right_image_url ?? null,
+          back_image_url:  job.back_image_url  ?? null,
+        })
         return
       } catch {}
       finally { setLoadingModel(false) }
@@ -44,8 +50,12 @@ export default function History() {
         id: job.job_id,
         model_name: job.model_name || (isWhite ? "White Mesh" : "Model") + " · " + (job.job_id?.slice(0, 8) || ""),
         model_url: modelUrl,
-        image_url: job.input_image_url ?? job.thumbnail_url ?? null,
+        image_url: job.front_image_url ?? job.input_image_url ?? null,
         thumbnail_url: job.thumbnail_url ?? job.input_image_url ?? null,
+        front_image_url: job.front_image_url ?? null,
+        left_image_url:  job.left_image_url  ?? null,
+        right_image_url: job.right_image_url ?? null,
+        back_image_url:  job.back_image_url  ?? null,
         has_texture: job.has_texture ?? false,
         has_skeleton: job.has_skeleton ?? false,
         user: null,

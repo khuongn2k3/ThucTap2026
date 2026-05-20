@@ -17,7 +17,6 @@ DROP TABLE IF EXISTS model_jobs;
 DROP TABLE IF EXISTS api_keys;
 DROP TABLE IF EXISTS users;
 
--- Re-enable foreign key checks
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- =========================================
@@ -55,27 +54,29 @@ CREATE TABLE payments (
     status ENUM('pending', 'completed', 'failed', 'expired') NOT NULL DEFAULT 'pending',
     sepay_transaction_id VARCHAR(100) NULL COMMENT 'SePay transaction reference',
     paid_at DATETIME NULL COMMENT 'Payment completion time',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     expires_at DATETIME NOT NULL COMMENT 'Payment expiry (60 minutes)',
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_user_id (user_id),
     INDEX idx_hex_id (hex_id),
-    INDEX idx_status (status),
-    INDEX idx_created_at (created_at)
+    INDEX idx_status (status)
+    -- idx_created_at removed: not defined in Payment model
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
 -- =========================================
 -- TABLE 3: model_jobs
 -- =========================================
+-- FIX: user_id là NULL + ON DELETE SET NULL (theo ModelJob model)
+-- FIX: thêm INDEX idx_updated_at (theo model có index=True trên updated_at)
 CREATE TABLE model_jobs (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    user_id INT UNSIGNED NOT NULL,
+    user_id INT UNSIGNED NULL,                          -- nullable, user có thể bị xoá
     job_id VARCHAR(100) NOT NULL UNIQUE,
     status ENUM('pending', 'processing', 'completed', 'failed') NOT NULL DEFAULT 'pending',
-    
+
     input_image_url VARCHAR(500) NOT NULL,
     front_image_url VARCHAR(500) NULL,
     left_image_url  VARCHAR(500) NULL,
@@ -96,11 +97,12 @@ CREATE TABLE model_jobs (
     completed_at DATETIME NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,  -- SET NULL khi user bị xoá
     INDEX idx_user_id (user_id),
     INDEX idx_job_id (job_id),
     INDEX idx_status (status),
-    INDEX idx_submission_id (submission_id)
+    INDEX idx_submission_id (submission_id),
+    INDEX idx_updated_at (updated_at)                               -- thêm theo model
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
@@ -182,36 +184,27 @@ CREATE TABLE gallery_collections (
 CREATE TABLE IF NOT EXISTS api_keys (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
 
-    -- Tên hiển thị để admin nhận biết
-    name VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL COMMENT 'Tên hiển thị để nhận biết key',
 
-    -- Giá trị key đầy đủ — CHỈ lưu hash (SHA-256), không lưu plaintext
-    -- Plaintext chỉ trả về 1 lần duy nhất khi tạo
+    -- Chỉ lưu SHA-256 hash, không bao giờ lưu plaintext
     key_hash VARCHAR(64) NOT NULL UNIQUE COMMENT 'SHA-256 hash of the raw key',
 
-    -- Tiền tố 12 ký tự đầu để hiển thị trong admin (vd: sk_forma_xxxx)
+    -- 12 ký tự đầu + 4 ký tự cuối để hiển thị (vd: sk_live_xxxx...abcd)
     key_preview VARCHAR(20) NOT NULL COMMENT 'First 12 chars + last 4 for display',
 
-    -- Chủ key (không bắt buộc phải là user trong hệ thống)
     owner_email VARCHAR(255) NULL COMMENT 'Email người được cấp key',
     owner_user_id INT UNSIGNED NULL COMMENT 'Nếu chủ key là user trong DB',
 
-    -- Quyền hạn
     quota_per_month INT UNSIGNED NULL COMMENT 'NULL = không giới hạn',
     calls_used INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Tổng lượt gọi từ trước đến nay',
     calls_this_month INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Lượt gọi tháng hiện tại',
     reset_at DATE NULL COMMENT 'Ngày reset calls_this_month gần nhất',
 
-    -- Trạng thái
     status ENUM('active', 'revoked', 'expired') NOT NULL DEFAULT 'active',
 
-    -- Thời hạn
     expires_at DATE NULL COMMENT 'NULL = không hết hạn',
-
-    -- Ghi chú của admin
     note TEXT NULL,
 
-    -- Timestamps
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     last_used_at DATETIME NULL COMMENT 'Lần cuối key được dùng',
@@ -223,12 +216,9 @@ CREATE TABLE IF NOT EXISTS api_keys (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
--- Add FK from model_jobs -> gallery_submissions (must be after both tables exist)
+-- Add FK from model_jobs -> gallery_submissions (phải sau khi cả 2 table đã tồn tại)
 ALTER TABLE model_jobs
     ADD CONSTRAINT fk_model_jobs_submission
     FOREIGN KEY (submission_id) REFERENCES gallery_submissions(id) ON DELETE SET NULL;
 
 SET FOREIGN_KEY_CHECKS = 1;
-
-SELECT 'Schema created successfully!' AS status;
-SELECT 'Tables: users, payments, model_jobs, gallery_submissions, submission_categories, gallery_likes, gallery_collections, api_keys' AS info;

@@ -53,6 +53,7 @@ void main() {
   #include <skinbase_vertex>
   #include <skinning_vertex>
   #include <skinnormal_vertex>
+  // skinnormal_vertex writes result into transformedNormal
   vNormal = normalize(normalMatrix * objectNormal);
   gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);
 }
@@ -60,7 +61,9 @@ void main() {
 const NORMAL_FRAG = `
 varying vec3 vNormal;
 void main() {
-  gl_FragColor = vec4(vNormal * 0.5 + 0.5, 1.0);
+  // abs() để normal luôn hiển thị màu dù nhìn từ hướng nào
+  vec3 n = normalize(vNormal);
+  gl_FragColor = vec4(abs(n) * 0.85 + 0.1, 1.0);
 }
 `
 
@@ -127,14 +130,20 @@ varying vec3 vViewDir;
 varying vec2 vUv;
 void main() {
   vec3 light = normalize(vec3(1.0, 2.0, 0.5));
-  float diff = dot(vNormal, light);
-  float edge = dot(vNormal, vViewDir);
-  float outline = smoothstep(0.1, 0.4, edge);
-  float hatch1 = step(0.5, fract((vUv.x + vUv.y) * 8.0 + diff * 2.0));
-  float hatch2 = step(0.5, fract((vUv.x - vUv.y) * 8.0));
-  float sketch = diff > 0.5 ? 1.0 : diff > 0.0 ? mix(hatch1, 1.0, 0.5) : hatch1 * hatch2;
-  float final = sketch * outline;
-  gl_FragColor = vec4(vec3(final * 0.2), 1.0);
+  float diff = max(dot(vNormal, light), 0.0);
+  float edge = max(dot(vNormal, vViewDir), 0.0);
+  // Outline rõ hơn ở silhouette
+  float outline = smoothstep(0.0, 0.35, edge);
+  // Hatching chỉ ở vùng tối
+  float hatch1 = step(0.55, fract((vUv.x + vUv.y) * 6.0));
+  float hatch2 = step(0.55, fract((vUv.x - vUv.y) * 6.0));
+  float hatch = diff > 0.6 ? 1.0
+              : diff > 0.3 ? mix(hatch1, 1.0, 0.6)
+              : hatch1 * hatch2;
+  // Nền trắng nhạt, nét vẽ tối
+  float brightness = hatch * outline;
+  vec3 col = mix(vec3(0.08), vec3(0.97), brightness);
+  gl_FragColor = vec4(col, 1.0);
 }
 `
 
@@ -164,11 +173,15 @@ varying vec3 vViewDir;
 uniform float uTime;
 void main() {
   vec3 holoColor = vec3(0.1, 0.8, 1.0);
-  float scan = step(0.5, fract(vPosition.y * 20.0 + uTime * 2.0));
-  float fresnel = pow(1.0 - abs(dot(vNormal, vViewDir)), 2.0);
-  float flicker = 0.85 + 0.15 * sin(uTime * 8.0);
-  float alpha = (fresnel * 0.6 + scan * 0.2 + 0.1) * flicker;
-  gl_FragColor = vec4(holoColor, alpha);
+  // Scanlines
+  float scan = step(0.4, fract(vPosition.y * 18.0 + uTime * 2.0)) * 0.3 + 0.7;
+  // Fresnel — edge glow
+  float fresnel = pow(1.0 - abs(dot(normalize(vNormal), normalize(vViewDir))), 1.5);
+  // Flicker
+  float flicker = 0.9 + 0.1 * sin(uTime * 7.0);
+  // Alpha đủ cao để luôn thấy model
+  float alpha = clamp(fresnel * 0.5 + 0.45, 0.35, 0.95) * scan * flicker;
+  gl_FragColor = vec4(holoColor * (0.6 + fresnel * 0.4), alpha);
 }
 `
 
@@ -189,6 +202,12 @@ function applyShaderToScene(scene, style, originalMaterials) {
       return
     }
 
+    // Nếu geometry không có normal attribute → tính luôn
+    // (một số model export từ OBJ/photogrammetry không có normals)
+    if (obj.geometry && !obj.geometry.attributes.normal) {
+      obj.geometry.computeVertexNormals()
+    }
+
     // Lưu material gốc lần đầu
     if (!originalMaterials.has(obj.uuid)) {
       originalMaterials.set(obj.uuid, obj.material)
@@ -203,7 +222,6 @@ function applyShaderToScene(scene, style, originalMaterials) {
         obj.material = new THREE.ShaderMaterial({
           vertexShader: SOLID_VERT,
           fragmentShader: SOLID_FRAG,
-          skinning: true,
         })
         break
       case "unlit": {
@@ -223,14 +241,12 @@ function applyShaderToScene(scene, style, originalMaterials) {
         obj.material = new THREE.ShaderMaterial({
           vertexShader: NORMAL_VERT,
           fragmentShader: NORMAL_FRAG,
-          skinning: true,
         })
         break
       case "cartoon":
         obj.material = new THREE.ShaderMaterial({
           vertexShader: CARTOON_VERT,
           fragmentShader: CARTOON_FRAG,
-          skinning: true,
           uniforms: {
             uColor:  { value: color.clone() },
             uMap:    { value: map },
@@ -242,14 +258,12 @@ function applyShaderToScene(scene, style, originalMaterials) {
         obj.material = new THREE.ShaderMaterial({
           vertexShader: SKETCH_VERT,
           fragmentShader: SKETCH_FRAG,
-          skinning: true,
         })
         break
       case "hologram":
         obj.material = new THREE.ShaderMaterial({
           vertexShader: HOLOGRAM_VERT,
           fragmentShader: HOLOGRAM_FRAG,
-          skinning: true,
           uniforms: { uTime: { value: 0 } },
           transparent: true,
           side: THREE.DoubleSide,
@@ -687,6 +701,14 @@ export default function ModelViewer3D({
         })
         return
       }
+
+      // Đảm bảo mọi mesh đều có normal — một số model (photogrammetry, OBJ export)
+      // không có normal attribute → shader dùng normal sẽ render đen/sai
+      model.traverse(obj => {
+        if (obj.isMesh && obj.geometry && !obj.geometry.attributes.normal) {
+          obj.geometry.computeVertexNormals()
+        }
+      })
 
       // Center và scale
       const box = new THREE.Box3().setFromObject(model)

@@ -547,12 +547,19 @@ export function ModelModal({ model, onClose, onSelect }) {
   useEffect(() => {
     if (!model.model_url) return
     const url = model.model_url
-    const ext = url.split("?")[0].split(".").pop().toLowerCase()
+    const rawExt = url.split("?")[0].split(".").pop().toLowerCase()
+    // Nếu URL không có extension hợp lệ (e.g. /download/id/white) → mặc định glb
+    const ext = ["glb", "obj", "stl"].includes(rawExt) ? rawExt : "glb"
     const controller = new AbortController()
 
     const timer = setTimeout(() => {
-    fetch(url, { signal: controller.signal })
-      .then(r => r.arrayBuffer())
+    const apiBase = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "")
+    const isInternal = !url.startsWith("http") || (apiBase && url.startsWith(apiBase))
+    // Dùng api (axios có auth) cho internal URL, fetch thường cho S3/CDN
+    const getBuffer = isInternal
+      ? api.get(url, { responseType: "arraybuffer" }).then(res => res.data)
+      : fetch(url, { signal: controller.signal }).then(r => r.arrayBuffer())
+    getBuffer
       .then(buf => {
 
         // ── GLB ─────────────────────────────────────────────────────────────
@@ -702,7 +709,7 @@ export function ModelModal({ model, onClose, onSelect }) {
         }
 
       })
-      .catch(err => { if (err.name !== "AbortError") {} })
+      .catch(err => { if (err?.name !== "AbortError") {} })
     }, 600) // defer: để modal render xong trước
 
     return () => {
@@ -1049,11 +1056,33 @@ export function ModelModal({ model, onClose, onSelect }) {
               </div>
             )}
 
-            {/* Input image */}
-            {model.image_url && (
-              <div style={{ marginBottom:16 }}>
-                <div style={{ fontSize:11, color:"#444", marginBottom:8, textTransform:"uppercase", letterSpacing:"0.08em" }}>Input</div>
-                <img src={model.image_url} alt="input" style={{ width:"100%", borderRadius:8, border:"1px solid #222", objectFit:"cover", maxHeight:160 }} />
+            {/* Input images (mv: front/left/right/back, hoặc fallback 1 ảnh) */}
+            {(model.front_image_url || model.left_image_url || model.right_image_url || model.back_image_url || model.image_url) && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 11, color: "#444", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.08em" }}>Input</div>
+                {(model.front_image_url || model.left_image_url || model.right_image_url || model.back_image_url) ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+                    {[
+                      { url: model.front_image_url, label: "Front" },
+                      { url: model.left_image_url,  label: "Left"  },
+                      { url: model.right_image_url, label: "Right" },
+                      { url: model.back_image_url,  label: "Back"  },
+                    ].filter(x => x.url).map(({ url, label }) => (
+                      <div key={label} style={{ position: "relative" }}>
+                        <img
+                          src={url}
+                          alt={label}
+                          style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 6, border: "1px solid #222", display: "block" }}
+                        />
+                        <span style={{ position: "absolute", bottom: 4, left: 5, fontSize: 9, color: "#aaa", background: "rgba(0,0,0,0.65)", padding: "1px 6px", borderRadius: 4, pointerEvents: "none" }}>
+                          {label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <img src={model.image_url} alt="input" style={{ width: "100%", borderRadius: 8, border: "1px solid #222", objectFit: "cover", maxHeight: 160 }} />
+                )}
               </div>
             )}
 
@@ -1064,7 +1093,8 @@ export function ModelModal({ model, onClose, onSelect }) {
                 <span style={{ fontSize:11, color:"#444" }}>{detailOpen ? "∧" : "∨"}</span>
               </button>
               {detailOpen && (() => {
-                const fmt = model.model_url ? model.model_url.split("?")[0].split(".").pop().toLowerCase() : ""
+                const rawFmt = model.model_url ? model.model_url.split("?")[0].split(".").pop().toLowerCase() : ""
+                const fmt = ["glb", "obj", "stl", "fbx"].includes(rawFmt) ? rawFmt : (model.model_url ? "glb" : "")
                 const isStl = fmt === "stl"
                 const isObj = fmt === "obj"
                 const rows = [

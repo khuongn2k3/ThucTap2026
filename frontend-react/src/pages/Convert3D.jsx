@@ -474,16 +474,15 @@ export default function Convert3D() {
   const isRunning = [STEPS.S1_LOADING,STEPS.S1_POLLING,STEPS.S2_LOADING,STEPS.S2_POLLING].includes(step)
 
   // ── Persist active job → sessionStorage (survive reload) ─────────────────
+  // Dùng localStorage thay sessionStorage — sessionStorage bị clear khi React
+  // unmount component trước reload (effect chạy với step=IDLE → removeItem)
   const JOB_KEY = "convert3d_active_job"
-  useEffect(() => {
-    if ([STEPS.S1_POLLING, STEPS.S2_POLLING].includes(step)) {
-      sessionStorage.setItem(JOB_KEY, JSON.stringify({
-        step, shapeJobId, activeJobId, withTexture, texture4k,
-      }))
-    } else {
-      sessionStorage.removeItem(JOB_KEY)
-    }
-  }, [step, shapeJobId, activeJobId, withTexture, texture4k])
+  const saveJob = (step, sjid, ajid) => {
+    localStorage.setItem(JOB_KEY, JSON.stringify({
+      step, shapeJobId: sjid, activeJobId: ajid, withTexture, texture4k,
+    }))
+  }
+  const clearJob = () => localStorage.removeItem(JOB_KEY)
 
   // ── Success toast — hiện khi step chuyển sang DONE ──────────────────────
   useEffect(() => {
@@ -567,7 +566,7 @@ export default function Convert3D() {
 
   const onErr = useCallback((msg) => {
     console.error("[Convert3D ERROR]", msg)
-    sessionStorage.removeItem("convert3d_active_job")
+    localStorage.removeItem(JOB_KEY)
     stopSSE(); setError(msg); setStep(STEPS.ERROR)
   }, [stopSSE])
 
@@ -600,49 +599,116 @@ export default function Convert3D() {
 
   // ── Restore job từ sessionStorage sau reload ──────────────────────────────
   useEffect(() => {
-    const raw = sessionStorage.getItem("convert3d_active_job")
+    const raw = localStorage.getItem(JOB_KEY)
     if (!raw) return
     let saved
-    try { saved = JSON.parse(raw) } catch { sessionStorage.removeItem("convert3d_active_job"); return }
+    try { saved = JSON.parse(raw) } catch { localStorage.removeItem(JOB_KEY); return }
 
-    const { step: sv, shapeJobId: sjid, activeJobId: ajid, withTexture: wt, texture4k: t4k } = saved
+    const { step: sv, shapeJobId: sjid, activeJobId: ajid, withTexture: wt, texture4k: t4k, startedAt } = saved
+    if (!sjid && !ajid) { localStorage.removeItem(JOB_KEY); return }
 
-    if (sv === STEPS.S1_POLLING && sjid) {
-      setStep(STEPS.S1_POLLING)
-      setShapeJobId(sjid); setActiveJobId(sjid)
+    // Poll status trước để biết job đang ở đâu + lấy url model nếu đã có
+    // Tránh: viewer trống khi reload vì whiteUrl/texUrl đều null
+    const jobToCheck = ajid || sjid
+    import("../services/api").then(({ default: apiMod }) => {
+      return apiMod.get(`/my-jobs/${jobToCheck}`)
+    }).then(({ data: status }) => {
+
       setWithTexture(wt ?? true); setTexture4k(t4k ?? false)
-      stageStartRef.current = Date.now()
-      doSSE(sjid, (url, m, sid) => {
-        setWhiteUrl(url); setCurrentJobId(sjid)
-        setSubmissionId(sid ?? null); setCollected(false)
-        setRefreshCount(c => c + 1)
-        if (wt ?? true) {
-          // Server đã lưu ảnh từ Stage 1 → gọi JSON endpoint, không cần File
-          setStep(STEPS.S1_DONE)
-          runStage2FromJobId(sjid, t4k ?? false)
-        } else {
-          setMetrics(m)
-          setStep(STEPS.DONE)
-          sessionStorage.removeItem("convert3d_active_job")
+      setShapeJobId(sjid)
+      stageStartRef.current = startedAt || Date.now()
+
+      // Nếu job đã completed/failed trong lúc tab đóng
+      if (status.status === "completed") {
+        if (status.output_model_url) {
+          if (sv === STEPS.S2_POLLING || sv === STEPS.S1_POLLING) {
+            // Tuỳ stage: set đúng url
+            if (sv === STEPS.S2_POLLING) {
+              setTexUrl(status.output_model_url)
+            } else {
+              setWhiteUrl(status.output_model_url)
+            }
+          }
         }
-      })
+        setCurrentJobId(jobToCheck)
+        setSubmissionId(status.submission_id ?? null)
+        setMetrics(status.metrics ?? null)
+        setStep(STEPS.DONE)
+        setRefreshCount(c => c + 1)
+        localStorage.removeItem(JOB_KEY)
+        return
+      }
 
-    } else if (sv === STEPS.S2_POLLING && ajid) {
-      // Stage 2 đang chạy → re-subscribe bình thường, không cần file ảnh
-      setStep(STEPS.S2_POLLING)
-      setShapeJobId(sjid); setActiveJobId(ajid)
-      setWithTexture(wt ?? true); setTexture4k(t4k ?? false)
-      stageStartRef.current = Date.now()
-      doSSE(ajid, (url, m, sid) => {
-        setTexUrl(url); setMetrics(m); setCurrentJobId(ajid)
-        setSubmissionId(sid ?? null); setCollected(false)
-        setStep(STEPS.DONE); setRefreshCount(c => c + 1)
-        sessionStorage.removeItem("convert3d_active_job")
-      })
+      if (status.status === "failed") {
+        localStorage.removeItem(JOB_KEY)
+        setStep(STEPS.ERROR)
+        setError(status.error_message || "Job failed")
+        return
+      }
 
-    } else {
-      sessionStorage.removeItem("convert3d_active_job")
-    }
+      // Job vẫn đang chạy (pending/processing) → reconnect SSE
+      if (sv === STEPS.S1_POLLING && sjid) {
+        setStep(STEPS.S1_POLLING)
+        setActiveJobId(sjid)
+        // Nếu white mesh đã có (stage 1 xong, đang chờ queue stage 2)
+        if (status.output_model_url) setWhiteUrl(status.output_model_url)
+        doSSE(sjid, (url, m, sid) => {
+          setWhiteUrl(url); setCurrentJobId(sjid)
+          setSubmissionId(sid ?? null); setCollected(false)
+          setRefreshCount(c => c + 1)
+          if (wt ?? true) {
+            setStep(STEPS.S1_DONE)
+            runStage2FromJobId(sjid, t4k ?? false)
+          } else {
+            setMetrics(m)
+            setStep(STEPS.DONE)
+            localStorage.removeItem(JOB_KEY)
+          }
+        })
+
+      } else if (sv === STEPS.S2_POLLING && ajid) {
+        setStep(STEPS.S2_POLLING)
+        setActiveJobId(ajid)
+        // Hiện white mesh trong lúc chờ texture xong
+        if (sjid) {
+          apiMod.get(`/my-jobs/${sjid}`).then(({ data: s1status }) => {
+            if (s1status.output_model_url) setWhiteUrl(s1status.output_model_url)
+          }).catch(() => {})
+        }
+        doSSE(ajid, (url, m, sid) => {
+          setTexUrl(url); setMetrics(m); setCurrentJobId(ajid)
+          setSubmissionId(sid ?? null); setCollected(false)
+          setStep(STEPS.DONE); setRefreshCount(c => c + 1)
+          localStorage.removeItem(JOB_KEY)
+        })
+
+      } else {
+        localStorage.removeItem(JOB_KEY)
+      }
+
+    }).catch(() => {
+      // Không fetch được status → vẫn thử reconnect SSE như cũ
+      if (sv === STEPS.S1_POLLING && sjid) {
+        setStep(STEPS.S1_POLLING); setActiveJobId(sjid)
+        doSSE(sjid, (url, m, sid) => {
+          setWhiteUrl(url); setCurrentJobId(sjid)
+          setSubmissionId(sid ?? null); setCollected(false)
+          setRefreshCount(c => c + 1)
+          if (wt ?? true) { setStep(STEPS.S1_DONE); runStage2FromJobId(sjid, t4k ?? false) }
+          else { setMetrics(m); setStep(STEPS.DONE); localStorage.removeItem(JOB_KEY) }
+        })
+      } else if (sv === STEPS.S2_POLLING && ajid) {
+        setStep(STEPS.S2_POLLING); setActiveJobId(ajid)
+        doSSE(ajid, (url, m, sid) => {
+          setTexUrl(url); setMetrics(m); setCurrentJobId(ajid)
+          setSubmissionId(sid ?? null); setCollected(false)
+          setStep(STEPS.DONE); setRefreshCount(c => c + 1)
+          localStorage.removeItem(JOB_KEY)
+        })
+      } else {
+        localStorage.removeItem(JOB_KEY)
+      }
+    })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // mount only — doSSE stable via useCallback
 
@@ -658,6 +724,7 @@ export default function Convert3D() {
       if (r.data.eta_texture) setEtaS2(r.data.eta_texture)
       setActiveJobId(r.data.job_id)
       setStep(STEPS.S2_POLLING)
+      localStorage.setItem(JOB_KEY, JSON.stringify({ step: STEPS.S2_POLLING, shapeJobId: sjid, activeJobId: r.data.job_id, withTexture: true, texture4k, startedAt: Date.now() }))
       doSSE(r.data.job_id, (url, m, sid) => {
         //prefetchModel(url)  // bắt đầu download ngầm ngay khi completed
         setTexUrl(url); setMetrics(m); setActiveJobId(null); setStep(STEPS.DONE)
@@ -683,12 +750,13 @@ export default function Convert3D() {
       if (r.data.eta_texture) setEtaS2(r.data.eta_texture)
       setActiveJobId(r.data.job_id)
       setStep(STEPS.S2_POLLING)
+      localStorage.setItem(JOB_KEY, JSON.stringify({ step: STEPS.S2_POLLING, shapeJobId: sjid, activeJobId: r.data.job_id, withTexture: true, texture4k: !!t4k, startedAt: Date.now() }))
       doSSE(r.data.job_id, (url, m, sid) => {
         setTexUrl(url); setMetrics(m); setActiveJobId(null)
         setCurrentJobId(r.data.job_id)
         setSubmissionId(sid ?? null); setCollected(false)
         setStep(STEPS.DONE); setRefreshCount(c => c + 1)
-        sessionStorage.removeItem("convert3d_active_job")
+        localStorage.removeItem(JOB_KEY)
       })
     } catch (e) {
       console.error("[Convert3D Stage 2 resume catch]", e?.response?.data || e?.message || e)
@@ -717,6 +785,7 @@ export default function Convert3D() {
       if (r.data.eta_shape)   setEtaS1(r.data.eta_shape)
       if (r.data.eta_texture) setEtaS2(r.data.eta_texture)
       setShapeJobId(jid); setActiveJobId(jid); setStep(STEPS.S1_POLLING)
+      localStorage.setItem(JOB_KEY, JSON.stringify({ step: STEPS.S1_POLLING, shapeJobId: jid, activeJobId: jid, withTexture, texture4k, startedAt: Date.now() }))
       doSSE(jid, (url, m, sid) => {
         //prefetchModel(url)  // bắt đầu download ngầm ngay khi completed
         setWhiteUrl(url); setActiveJobId(null)
@@ -741,7 +810,7 @@ export default function Convert3D() {
 
   const handleReset = () => {
     stopSSE()
-    sessionStorage.removeItem("convert3d_active_job")
+    localStorage.removeItem(JOB_KEY)
     clearInterval(timerRef.current)
     stageStartRef.current = null
     setElapsedSec(0)
