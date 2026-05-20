@@ -1135,27 +1135,7 @@ export default function Convert3D() {
             </div>
           )}
 
-          {/* Metrics */}
-          {metrics && (
-            <div style={{
-              marginTop: 10, padding: "10px 12px", borderRadius: 8,
-              background: "#14141a", border: "1px solid #252530",
-            }}>
-              <div style={{ fontSize: 10, color: "#555", fontWeight: 600,
-                letterSpacing: "0.08em", marginBottom: 6 }}>STATS</div>
-              {[
-                ["Time",       `${metrics.duration_minutes}m`],
-                ["VRAM peak",  `${metrics.vram_peak_gb} GB`],
-                ["RAM delta",  `+${metrics.ram_delta_gb} GB`],
-              ].map(([l,v]) => (
-                <div key={l} style={{ display: "flex", justifyContent: "space-between",
-                  padding: "2px 0" }}>
-                  <span style={{ fontSize: 11, color: "#555" }}>{l}</span>
-                  <span style={{ fontSize: 11, color: "#888", fontFamily: "monospace" }}>{v}</span>
-                </div>
-              ))}
-            </div>
-          )}
+
         </div>
 
         <style>{`
