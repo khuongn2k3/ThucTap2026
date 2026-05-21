@@ -66,18 +66,11 @@ echo ""
 
 read -p "Nhan ENTER de bat dau hoac Ctrl+C de huy..."
 
-# ── Nhap IP thue hoac domain ngoai (tuy chon) ──
+# ── Nhap tunnel/IP backend ──
 echo ""
-echo -e "${CYAN}╔══════════════════════════════════════════════════════════╗${NC}"
-echo -e "${CYAN}║        🌐 CAU HINH IP / DOMAIN BEN NGOAI (OPTIONAL)     ║${NC}"
-echo -e "${CYAN}╚══════════════════════════════════════════════════════════╝${NC}"
-echo -e "${YELLOW}Nhap IP thue hoac domain day du (co hoac khong co https://).${NC}"
-echo -e "${YELLOW}Vi du:${NC}"
-echo -e "${CYAN}  IP thue    : 203.0.113.45${NC}"
-echo -e "${CYAN}  Cloudflare : https://abc-xyz.trycloudflare.com${NC}"
-echo -e "${YELLOW}De trong va nhan ENTER neu chi dung localhost.${NC}"
-echo ""
-read -p "🖥️  Nhap IP hoac domain (hoac ENTER de bo qua): " EXTERNAL_INPUT
+echo -e "${CYAN}🌐 Nhap Backend Tunnel URL (IP thue hoac Cloudflare tunnel):${NC}"
+echo -e "${YELLOW}   Vi du: 203.0.113.45  hoac  https://abc-xyz.trycloudflare.com${NC}"
+read -rp "   BACKEND_URL (Enter de dung mac dinh http://localhost:8000): " EXTERNAL_INPUT
 
 if [ -n "$EXTERNAL_INPUT" ]; then
     # Kiem tra neu da co http:// hoac https:// thi dung nguyen
@@ -662,6 +655,43 @@ LOAD_MODEL_ON_STARTUP=True
 EOF
 
 echo -e "${GREEN}✅ .env generated${NC}"
+
+# ── Cập nhật frontend-react/.env ──
+FRONTEND_ENV_PATH="$(dirname "$(pwd)")/frontend-react/.env"
+if [ ! -f "$FRONTEND_ENV_PATH" ]; then
+    # Thử tìm trong các vị trí phổ biến
+    for TRY_PATH in \
+        "../frontend-react/.env" \
+        "../../frontend-react/.env" \
+        "../frontend/.env"
+    do
+        if [ -f "$TRY_PATH" ]; then
+            FRONTEND_ENV_PATH="$TRY_PATH"
+            break
+        fi
+    done
+fi
+
+VITE_API_URL="${EXTERNAL_URL}/api/v1"
+
+if [ -f "$FRONTEND_ENV_PATH" ]; then
+    # Cập nhật VITE_API_URL nếu đã tồn tại, không thì append
+    if grep -q "^VITE_API_URL=" "$FRONTEND_ENV_PATH"; then
+        sed -i "s|^VITE_API_URL=.*|VITE_API_URL=${VITE_API_URL}|" "$FRONTEND_ENV_PATH"
+    else
+        echo "VITE_API_URL=${VITE_API_URL}" >> "$FRONTEND_ENV_PATH"
+    fi
+    echo -e "${GREEN}✅ frontend-react/.env updated: VITE_API_URL=${VITE_API_URL}${NC}"
+    echo -e "${CYAN}   File: $FRONTEND_ENV_PATH${NC}"
+else
+    echo -e "${YELLOW}⚠️  Không tìm thấy frontend-react/.env — tạo mới tại ../frontend-react/.env${NC}"
+    mkdir -p "$(dirname "../frontend-react/.env")"
+    cat > "../frontend-react/.env" <<FRONTEOF
+VITE_API_URL=${VITE_API_URL}
+VITE_APP_NAME=Hunyuan3D
+FRONTEOF
+    echo -e "${GREEN}✅ frontend-react/.env created: VITE_API_URL=${VITE_API_URL}${NC}"
+fi
 
 # Init database
 python -c "
