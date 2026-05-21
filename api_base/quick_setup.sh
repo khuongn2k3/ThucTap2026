@@ -58,6 +58,7 @@ echo "  ✓ Install all dependencies"
 echo "  ✓ Download project tu HuggingFace"
 echo "  ✓ Compile CUDA modules (hunyuan3d-2mv)"
 echo "  ✓ Create database & tables"
+echo "  ✓ Create Admin account (admin@gmail.com)"
 echo "  ✓ Generate full .env file"
 echo "  ✓ Install frontend (Node.js + npm)"
 echo ""
@@ -117,6 +118,12 @@ else
     FRONTEND_URL="${FRONTEND_URL%/}"  # bo trailing slash neu co
     echo -e "${GREEN}✅ Frontend URL: $FRONTEND_URL${NC}"
 fi
+
+# Them FRONTEND_URL vao ALLOWED_ORIGINS neu chua co
+if [[ "$ALLOWED_ORIGINS" != *"$FRONTEND_URL"* ]]; then
+    ALLOWED_ORIGINS="${ALLOWED_ORIGINS},${FRONTEND_URL}"
+fi
+echo -e "${CYAN}   ALLOWED_ORIGINS (final): $ALLOWED_ORIGINS${NC}"
 echo ""
 
 START_TIME=$(date +%s)
@@ -712,7 +719,7 @@ except Exception as e:
 
 # Seed admin user
 try:
-    from app.security import hash_password
+    from app.security.security import hash_password
     with Session(engine) as db:
         exists = db.query(User).filter(User.email == 'admin@gmail.com').first()
         if not exists:

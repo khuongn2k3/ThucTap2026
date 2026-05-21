@@ -1433,7 +1433,8 @@ export default function Convert3D() {
 
           {showExport && viewerSrc && (
             <ConvertExportModal 
-              modelUrl={viewerSrc} 
+              modelUrl={viewerSrc}
+              resolvedSrcFormat={resolvedExt || "glb"}
               modelName={front?.name?.split('.')[0] || "model"}
               submissionId={submissionId}
               jobId={currentJobId}
@@ -2126,11 +2127,11 @@ function ConvertSharePopup({ submissionId, onClose }) {
 function getSrcFormat(modelUrl) {
   if (!modelUrl) return "glb"
   const ext = modelUrl.split("?")[0].split(".").pop().toLowerCase()
-  return ext || "glb"
+  return ["glb", "obj", "stl"].includes(ext) ? ext : "glb"
 }
 
-function ConvertExportModal({ modelUrl, modelName, submissionId, jobId, hasSkeleton, texResolution, onClose }) {
-  const srcFormat = getSrcFormat(modelUrl)   // "glb" | "obj" | "stl"
+function ConvertExportModal({ modelUrl, resolvedSrcFormat, modelName, submissionId, jobId, hasSkeleton, texResolution, onClose }) {
+  const srcFormat = resolvedSrcFormat || getSrcFormat(modelUrl)   // prefer magic-bytes detected ext over URL parsing
 
   const [format, setFormat]           = useState(srcFormat.toUpperCase() === "OBJ" ? "OBJ" : "GLB")
   const [texRes, setTexRes]           = useState(texResolution || "4k")
@@ -2306,7 +2307,7 @@ function ConvertExportModal({ modelUrl, modelName, submissionId, jobId, hasSkele
           )}
           {texRes !== texResolution && texResolution && submissionId && (
             <div style={{ fontSize:11, color:"#888", marginTop:6 }}>
-              Will downscale from ${texResolution} to ${texRes}
+              ↓ Will downscale from {texResolution} to {texRes}
             </div>
           )}
         </div>

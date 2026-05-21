@@ -113,7 +113,7 @@ export default function Gallery() {
       .then(res => {
         const list = res.data?.models ?? []
         setModels(list)
-        // Nếu vào từ link /3d-model/ten-model-uuid → tự mở modal
+        // If accessed via /3d-model/model-name-uuid → auto open modal
         if (slug && !selectedModel) {
           const uuid = slug.slice(-36)
           const found = list.find(m => m.uuid === uuid)
@@ -122,7 +122,7 @@ export default function Gallery() {
       })
       .catch(() => setModels([]))
       .finally(() => setLoading(false))
-  }, [activeCategory, activeSort, slug]) // fix: thêm slug để reload đúng khi URL đổi từ ngoài
+  }, [activeCategory, activeSort, slug]) // fix: add slug to reload correctly when URL changes externally
 
   return (
     <>
@@ -139,10 +139,10 @@ export default function Gallery() {
       >
         <source src="/bg-video.mp4" type="video/mp4" />
       </video>
-      {/* Overlay tối để content dễ đọc */}
+      {/* Dark overlay for readability */}
       <div style={{ position:"fixed", inset:0, background:"rgba(8,8,8,0.75)", zIndex:1, pointerEvents:"none" }} />
 
-      {/* Tất cả content nằm trên video */}
+      {/* All content sits above the video */}
       <div style={{ position:"relative", zIndex:2 }}>
 
       {/* ══ HERO ══ */}
@@ -196,7 +196,7 @@ export default function Gallery() {
           {/* Left: Filter button (fixed) + scrollable tags */}
           <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0, flex:1 }}>
 
-            {/* Filter button — không cuộn */}
+            {/* Filter button — fixed, no scroll */}
             <button onClick={() => setShowFilter(p => !p)} style={{ flexShrink:0, display:"flex", alignItems:"center", gap:6, fontSize:12, color:showFilter?"#a89ff5":"#888", background:showFilter?"rgba(124,110,245,0.12)":"#0f0f0f", border:`1px solid ${showFilter?"rgba(124,110,245,0.4)":"#1e1e1e"}`, borderRadius:99, padding:"6px 14px", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", transition:"all 0.15s", whiteSpace:"nowrap" }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
               Filter ▾
@@ -204,14 +204,14 @@ export default function Gallery() {
 
             <div style={{ flexShrink:0, width:1, height:18, background:"#1e1e1e" }} />
 
-            {/* All — cố định, không cuộn */}
+            {/* All — fixed, no scroll */}
             <FilterTag label="All"
               active={activeCategory === "Featured"}
               onClick={() => setActiveCategory("Featured")} />
 
             <div style={{ flexShrink:0, width:1, height:18, background:"#1e1e1e" }} />
 
-            {/* Categories — chỉ vùng này cuộn */}
+            {/* Categories — only this area scrolls */}
             <div className="tags-scroll" style={{ display:"flex", alignItems:"center", gap:6, overflowX:"auto", minWidth:0 }}>
               {CATEGORIES.filter(c => c !== "Featured").map(c => (
                 <FilterTag key={c} label={c}
@@ -221,13 +221,13 @@ export default function Gallery() {
             </div>
           </div>
 
-          {/* Feature My Model — right, không cuộn */}
+          {/* Feature My Model — right, fixed */}
           <button onClick={() => isLoggedIn ? setShowFeature(true) : window.dispatchEvent(new CustomEvent("open-auth-modal"))}
             style={{ flexShrink:0, fontSize:12, color:"#7c6ef5", border:"1px solid rgba(124,110,245,0.3)", borderRadius:99, padding:"6px 16px", background:"none", cursor:"pointer", fontFamily:"'DM Sans',sans-serif", whiteSpace:"nowrap" }}
           >+ Feature My Model</button>
         </div>
 
-        {/* Filter panel — Sort (overlay, không đẩy content) */}
+        {/* Filter panel — Sort (overlay, does not push content) */}
         {showFilter && (
           <div style={{ position:"absolute", top:52, left:0, zIndex:50 }}>
             <div style={{ background:"#111", border:"1px solid #1e1e1e", borderRadius:14, padding:20, width:280, boxShadow:"0 16px 40px rgba(0,0,0,0.6)" }} onClick={e => e.stopPropagation()}>
@@ -252,7 +252,7 @@ export default function Gallery() {
         {loading ? <SkeletonGrid /> : models.length === 0 ? (
           <div style={{ textAlign:"center", padding:"60px 0", color:"#333" }}>
             <div style={{ fontSize:40, marginBottom:12 }}>🗂</div>
-            <div style={{ fontSize:14 }}>Chưa có model nào</div>
+            <div style={{ fontSize:14 }}>No models yet</div>
           </div>
         ) : <MasonryGrid models={models} onSelect={handleSelect} />}
         </div>
@@ -261,7 +261,7 @@ export default function Gallery() {
       </div>{/* end zIndex:2 content wrapper */}
     </div>
 
-      {/* ══ MODEL DETAIL MODAL ══ — ngoài stacking context zIndex:2 để đè được navbar */}
+      {/* ══ MODEL DETAIL MODAL ══ — outside zIndex:2 stacking context to overlay navbar */}
       {selectedModel && (
         <ModelModal model={selectedModel} onClose={() => {
           setSelectedModel(null)
@@ -307,8 +307,8 @@ const MasonryGrid = memo(function MasonryGrid({ models, onSelect }) {
 
 /* ─────────────────────────────────────────────
    MODEL CARD
-   Gallery dùng ảnh thumbnail (như Tripo3D) — 3D chỉ load trong modal
-   Smooth, không lag, chuyên nghiệp
+   Gallery uses thumbnail images (like Tripo3D) — 3D only loads in modal
+   Smooth, no lag, professional
 ───────────────────────────────────────────── */
 const ModelCard = memo(function ModelCard({ model, onSelect }) {
   const [hov, setHov]     = useState(false)
@@ -376,8 +376,8 @@ const ModelCard = memo(function ModelCard({ model, onSelect }) {
           }} />
         )}
 
-        {/* Ảnh thumbnail — lazy load, không dùng WebGL */}
-        {/* Thumbnail render từ 3D — dùng cho gallery card */}
+        {/* Thumbnail image — lazy load, no WebGL */}
+        {/* 3D-rendered thumbnail — used for gallery card */}
         {model.thumbnail_url ? (
           <img
             src={model.thumbnail_url}
@@ -393,7 +393,7 @@ const ModelCard = memo(function ModelCard({ model, onSelect }) {
             }}
           />
         ) : model.image_url ? (
-          // Fallback: ảnh user upload nếu chưa có thumbnail render
+          // Fallback: user-uploaded image if no rendered thumbnail yet
           <img
             src={model.image_url}
             alt={model.model_name}
@@ -420,7 +420,7 @@ const ModelCard = memo(function ModelCard({ model, onSelect }) {
           pointerEvents: "none",
         }} />
 
-        {/* Model name hiện khi hover — giống Tripo */}
+        {/* Model name shown on hover — like Tripo */}
         {hov && model.model_name && (
           <div style={{
             position: "absolute", bottom: 8, left: 10, right: 44,
@@ -476,7 +476,7 @@ const ModelCard = memo(function ModelCard({ model, onSelect }) {
           </span>
         </div>
 
-        {/* Like count luôn hiện */}
+        {/* Like count always visible */}
         <div style={{ display:"flex", alignItems:"center", gap:4, fontSize:11, color: liked ? "#f87171" : "#333", flexShrink:0 }}>
           <svg width="10" height="10" viewBox="0 0 24 24" fill={liked?"#f87171":"#333"} stroke="none">
             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
@@ -528,11 +528,11 @@ export function ModelModal({ model, onClose, onSelect }) {
   const cameraQuatRef = useRef({ x:0, y:0, z:0, w:1 })
   const [relatedModels, setRelatedModels] = useState([])
 
-  // Fetch related models theo category đầu tiên, loại trừ model hiện tại
+  // Fetch related models by first category, excluding current model
   useEffect(() => {
     const cat = model.categories?.[0]
     if (!cat) return
-    // fix: dùng api đã import static thay vì dynamic import mỗi lần mở modal
+    // fix: use statically imported api instead of dynamic import on each modal open
     api.get("/gallery", { params: { category: cat.toLowerCase(), limit: 6 } })
       .then(res => {
         const others = (res.data?.models ?? []).filter(m => m.id !== model.id)
@@ -542,20 +542,20 @@ export function ModelModal({ model, onClose, onSelect }) {
   }, [model.id])
 
   // Parse model info: vertices, faces, texture resolution, skeleton
-  // Hỗ trợ GLB, OBJ, STL
-  // fix: defer 600ms để modal render xong trước, dùng AbortController để cancel nếu modal đóng
+  // Supports GLB, OBJ, STL
+  // fix: defer 600ms to let modal render first, use AbortController to cancel if modal closes
   useEffect(() => {
     if (!model.model_url) return
     const url = model.model_url
     const rawExt = url.split("?")[0].split(".").pop().toLowerCase()
-    // Nếu URL không có extension hợp lệ (e.g. /download/id/white) → mặc định glb
+    // If URL has no valid extension (e.g. /download/id/white) → default to glb
     const ext = ["glb", "obj", "stl"].includes(rawExt) ? rawExt : "glb"
     const controller = new AbortController()
 
     const timer = setTimeout(() => {
     const apiBase = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "")
     const isInternal = !url.startsWith("http") || (apiBase && url.startsWith(apiBase))
-    // Dùng api (axios có auth) cho internal URL, fetch thường cho S3/CDN
+    // Use api (axios with auth) for internal URLs, plain fetch for S3/CDN
     const getBuffer = isInternal
       ? api.get(url, { responseType: "arraybuffer" }).then(res => res.data)
       : fetch(url, { signal: controller.signal }).then(r => r.arrayBuffer())
@@ -592,7 +592,7 @@ export function ModelModal({ model, onClose, onSelect }) {
             if (totalFaces > 0) setMeshFaces(totalFaces)
           }
 
-          // Texture resolution từ ảnh đầu tiên embed trong GLB
+          // Texture resolution from first image embedded in GLB
           if (json.images && json.images.length > 0 && json.bufferViews) {
             const binOffset = 12 + 8 + jsonLen + 8
             const imgRef = json.images[0]
@@ -621,7 +621,7 @@ export function ModelModal({ model, onClose, onSelect }) {
           const text = new TextDecoder().decode(buf)
           let vCount = 0
           let fTris  = 0
-          let mtlFile = null   // tên file .mtl được reference trong OBJ
+          let mtlFile = null   // name of .mtl file referenced in OBJ
 
           for (const line of text.split("\n")) {
             const t = line.trimStart()
@@ -631,30 +631,30 @@ export function ModelModal({ model, onClose, onSelect }) {
               fTris += Math.max(0, verts - 2)
             }
             else if (t.startsWith("mtllib ") && !mtlFile) {
-              // "mtllib model.mtl" → lấy tên file MTL
+              // "mtllib model.mtl" → extract MTL filename
               mtlFile = t.slice(7).trim().split(/\s+/)[0]
             }
           }
           if (vCount > 0) setMeshVertices(vCount)
           if (fTris  > 0) setMeshFaces(fTris)
 
-          // Parse MTL để tìm texture và detect PBR
+          // Parse MTL to find texture and detect PBR
           if (mtlFile) {
             const mtlUrl = url.replace(/\/[^/]+(\?.*)?$/, `/${mtlFile}`)
             fetch(mtlUrl)
               .then(r => r.ok ? r.text() : Promise.reject())
               .then(mtlText => {
-                // Detect PBR từ MTL: các keyword của PBR extension
+                // Detect PBR from MTL: PBR extension keywords
                 const hasPbrKeywords = /^\s*(Pr|Pm|map_Pr|map_Pm|norm|map_Bump)\s/m.test(mtlText)
                 if (hasPbrKeywords) setHasPbr(true)
 
-                // Tìm texture map đầu tiên (map_Kd, map_Pr, map_d, ...)
+                // Find first texture map (map_Kd, map_Pr, map_d, ...)
                 const mapMatch = mtlText.match(/^\s*map_\w+\s+(\S+)/m)
                 if (!mapMatch) return
                 const texFile = mapMatch[1].trim().replace(/\\/g, "/").split("/").pop()
                 const texUrl  = url.replace(/\/[^/]+(\?.*)?$/, `/${texFile}`)
 
-                // Fetch texture → đo kích thước
+                // Fetch texture → measure dimensions
                 return fetch(texUrl)
                   .then(r => r.ok ? r.blob() : Promise.reject())
                   .then(blob => new Promise((res, rej) => {
@@ -681,22 +681,22 @@ export function ModelModal({ model, onClose, onSelect }) {
         // ── STL ─────────────────────────────────────────────────────────────
         if (ext === "stl") {
           setTexResolution("none")
-          // Phân biệt binary STL và ASCII STL
+          // Distinguish binary STL from ASCII STL
           // Binary STL: 80 bytes header + 4 bytes triangle count + 50 bytes/triangle
           const text80 = new TextDecoder("utf-8", { fatal: false }).decode(buf.slice(0, 80))
           const isAscii = text80.trimStart().toLowerCase().startsWith("solid")
-            && buf.byteLength < 500_000  // file nhỏ thì thử ASCII trước
+            && buf.byteLength < 500_000  // small file: try ASCII first
 
           if (isAscii) {
-            // ASCII STL: đếm số "facet normal"
+            // ASCII STL: count number of "facet normal"
             const fullText = new TextDecoder().decode(buf)
             const faceCount = (fullText.match(/^\s*facet\s+normal/gm) || []).length
             if (faceCount > 0) {
               setMeshFaces(faceCount)
-              setMeshVertices(faceCount * 3)   // mỗi facet = 1 tam giác = 3 vertices
+              setMeshVertices(faceCount * 3)   // each facet = 1 triangle = 3 vertices
             }
           } else {
-            // Binary STL: 4 bytes tại offset 80 = số triangle
+            // Binary STL: 4 bytes at offset 80 = triangle count
             if (buf.byteLength >= 84) {
               const faceCount = new DataView(buf).getUint32(80, true)
               if (faceCount > 0) {
@@ -710,7 +710,7 @@ export function ModelModal({ model, onClose, onSelect }) {
 
       })
       .catch(err => { if (err?.name !== "AbortError") {} })
-    }, 600) // defer: để modal render xong trước
+    }, 600) // defer: let modal render before parsing
 
     return () => {
       clearTimeout(timer)
@@ -991,7 +991,7 @@ export function ModelModal({ model, onClose, onSelect }) {
               >↗</button>
 
               {/* Auto-rotate toggle */}
-              <button onClick={() => setAutoRotate(p => !p)} title={autoRotate ? "Dừng xoay" : "Xoay tự động"}
+              <button onClick={() => setAutoRotate(p => !p)} title={autoRotate ? "Pause rotation" : "Auto rotate"}
                 style={{ background:autoRotate?"rgba(124,110,245,0.15)":"rgba(255,255,255,0.05)", border:`1px solid ${autoRotate?"rgba(124,110,245,0.4)":"#2a2a2a"}`, borderRadius:99, cursor:"pointer", display:"flex", alignItems:"center", gap:5, padding:"4px 12px", transition:"all 0.2s" }}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={autoRotate?"#a89ff5":"#555"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1056,7 +1056,7 @@ export function ModelModal({ model, onClose, onSelect }) {
               </div>
             )}
 
-            {/* Input images (mv: front/left/right/back, hoặc fallback 1 ảnh) */}
+            {/* Input images (mv: front/left/right/back, or fallback single image) */}
             {(model.front_image_url || model.left_image_url || model.right_image_url || model.back_image_url || model.image_url) && (
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 11, color: "#444", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.08em" }}>Input</div>
@@ -1098,13 +1098,13 @@ export function ModelModal({ model, onClose, onSelect }) {
                 const isStl = fmt === "stl"
                 const isObj = fmt === "obj"
                 const rows = [
-                  // Texture: hiện cho GLB (có value) và OBJ (đợi parse), ẩn cho STL
+                  // Texture: show for GLB (has value) and OBJ (pending parse), hide for STL
                   !isStl && ["Texture", texResolution
                     ? texResolution
-                    : isObj ? "Đang đọc..." : "—"],
-                  // Skeleton: chỉ meaningful với GLB
+                    : isObj ? "Loading..." : "—"],
+                  // Skeleton: only meaningful for GLB
                   !isStl && !isObj && ["Skeleton", hasSkeleton ? "✓" : "—"],
-                  // PBR: GLB và OBJ có thể có
+                  // PBR: GLB and OBJ may have it
                   !isStl && ["PBR", hasPbr ? "✓" : "—"],
                   ["Format",   fmt.toUpperCase() || "—"],
                   ["Platform", "FORMA"],
@@ -1115,8 +1115,8 @@ export function ModelModal({ model, onClose, onSelect }) {
                     {rows.map(([k, v]) => (
                       <div key={k} style={{ display:"flex", justifyContent:"space-between" }}>
                         <span style={{ fontSize:12, color:"#555" }}>{k}</span>
-                        <span style={{ fontSize:12, color: v === "Đang đọc..." ? "#444" : "#888",
-                          fontStyle: v === "Đang đọc..." ? "italic" : "normal" }}>{v}</span>
+                        <span style={{ fontSize:12, color: v === "Loading..." ? "#444" : "#888",
+                          fontStyle: v === "Loading..." ? "italic" : "normal" }}>{v}</span>
                       </div>
                     ))}
                   </div>
@@ -1132,7 +1132,7 @@ export function ModelModal({ model, onClose, onSelect }) {
                   {relatedModels.map(m => (
                     <div key={m.id} onClick={() => onSelect(m)}
                       style={{ borderRadius:8, overflow:"hidden", background:"radial-gradient(ellipse at 50% 55%, #3a3a3a 0%, #1a1a1a 100%)", border:"1px solid #1e1e1e", cursor:"pointer", aspectRatio:"1", position:"relative" }}>
-                      {/* fix: dùng thumbnail/image thay vì ModelViewer3D để tránh spawn 4 WebGL context */}
+                      {/* fix: use thumbnail/image instead of ModelViewer3D to avoid spawning 4 WebGL contexts */}
                       {m.thumbnail_url
                         ? <img src={m.thumbnail_url} alt={m.model_name} style={{ width:"100%", height:"100%", objectFit:"cover" }} />
                         : m.image_url
@@ -1164,7 +1164,7 @@ export function ModelModal({ model, onClose, onSelect }) {
             <ViewerGizmo cameraQuatRef={cameraQuatRef} />
           </div>
 
-          {/* Icon buttons + popups — wrapper position:relative để popup absolute ra trái */}
+          {/* Icon buttons + popups — wrapper position:relative so popup can absolute-position left */}
           <div style={{ position:"relative" }}>
             <div style={{ display:"flex", flexDirection:"column", gap:1, background:"rgba(0,0,0,0.6)", border:"1px solid #2a2a2a", borderRadius:10, overflow:"hidden" }}>
               <button
@@ -1202,7 +1202,7 @@ export function ModelModal({ model, onClose, onSelect }) {
               </button>
             </div>
 
-            {/* Environment Settings popup — absolute bên trái icon buttons */}
+            {/* Environment Settings popup — absolute-positioned left of icon buttons */}
             {showEnvSettings && (
               <div style={{ position:"absolute", top:0, right:44, background:"#1a1a1a", border:"1px solid #2a2a2a", borderRadius:12, padding:20, width:280, zIndex:30 }} onClick={e => e.stopPropagation()}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
@@ -1261,7 +1261,7 @@ export function ModelModal({ model, onClose, onSelect }) {
               </div>
             )}
 
-            {/* View Settings popup — absolute bên trái icon buttons, offset xuống theo vị trí nút */}
+            {/* View Settings popup — absolute-positioned left of icon buttons, offset by button position */}
             {showViewSettings && (
               <div style={{ position:"absolute", top:37, right:44, background:"#1a1a1a", border:"1px solid #2a2a2a", borderRadius:12, padding:20, width:260, zIndex:30 }} onClick={e => e.stopPropagation()}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
@@ -1369,7 +1369,7 @@ function ActionBtn({ label, icon, yellow, onClick }) {
 const FORMATS  = ["GLB", "OBJ", "STL"]
 const TEX_RES  = ["512", "1k", "2k", "4k"]
 
-/** Lấy extension gốc của model từ URL, vd "glb" | "obj" | "stl" */
+/** Get original model extension from URL, e.g. "glb" | "obj" | "stl" */
 function getSrcFormat(modelUrl) {
   if (!modelUrl) return "glb"
   const ext = modelUrl.split("?")[0].split(".").pop().toLowerCase()
@@ -1386,17 +1386,17 @@ function ExportModal({ model, hasSkeleton, texResolution, onClose }) {
   const [fileName, setFileName]       = useState(model.model_name || "model")
   const [downloading, setDownloading] = useState(false)
 
-  // Map resolution sang số pixel để so sánh
+  // Map resolution to pixel count for comparison
   const RES_ORDER = { "512":512, "1k":1024, "2k":2048, "4k":4096 }
   const maxRes = RES_ORDER[texResolution] || 4096
 
-  // Set default texRes về resolution gốc khi biết
+  // Set default texRes to original resolution once known
   useEffect(() => {
     if (texResolution) setTexRes(texResolution)
   }, [texResolution])
 
-  // GLB→OBJ là trường hợp duy nhất trả về .zip (vì có textures)
-  // STL→OBJ chỉ trả .obj (STL không có material)
+  // GLB→OBJ is the only case that returns .zip (because it has textures)
+  // STL→OBJ only returns .obj (STL has no material)
   const downloadExt  = (format === "OBJ" && srcFormat === "glb") ? "zip" : format.toLowerCase()
   const needsConvert = format.toLowerCase() !== srcFormat
 
@@ -1406,7 +1406,7 @@ function ExportModal({ model, hasSkeleton, texResolution, onClose }) {
     try {
       const apiMod = (await import("../services/api")).default
 
-      // ── Private asset (chưa publish) → gọi /my-jobs/{job_id}/export ───────
+      // ── Private asset (not yet published) → call /my-jobs/{job_id}/export ──────
       if (model._privateAsset) {
         const params = {
           format: format.toLowerCase(),
@@ -1425,7 +1425,7 @@ function ExportModal({ model, hasSkeleton, texResolution, onClose }) {
       }
 
       if (needsConvert) {
-        // ── Cần convert (OBJ→GLB hoặc GLB→OBJ) → luôn gọi API ──────────────
+        // ── Needs conversion (OBJ→GLB or GLB→OBJ) → always call API ───────────
         const res = await apiMod.get(`/gallery/${model.id}/export`, {
           params: { format: format.toLowerCase(), ...(!skeleton && { include_skeleton: false }), ...(pivot && { bottom_center_pivot: true }) },
           responseType: "blob",
@@ -1438,7 +1438,7 @@ function ExportModal({ model, hasSkeleton, texResolution, onClose }) {
         URL.revokeObjectURL(url)
 
       } else if (texResolution !== "none" && RES_ORDER[texRes] < (texResolution ? RES_ORDER[texResolution] : RES_ORDER["4k"])) {
-        // ── Cùng format nhưng cần downscale texture → gọi API ───────────────
+        // ── Same format but needs texture downscale → call API ────────────────
         const res = await apiMod.get(`/gallery/${model.id}/export`, {
           params: { tex_res: texRes, format: format.toLowerCase(), ...(!skeleton && { include_skeleton: false }), ...(pivot && { bottom_center_pivot: true }) },
           responseType: "blob",
@@ -1451,7 +1451,7 @@ function ExportModal({ model, hasSkeleton, texResolution, onClose }) {
         URL.revokeObjectURL(url)
 
       } else if (skeleton || pivot) {
-        // ── Cùng format, không downscale, nhưng có skeleton/pivot → gọi API ─
+        // ── Same format, no downscale, but has skeleton/pivot → call API ───────
         const res = await apiMod.get(`/gallery/${model.id}/export`, {
           params: { format: format.toLowerCase(), ...(!skeleton && { include_skeleton: false }), ...(pivot && { bottom_center_pivot: true }) },
           responseType: "blob",
@@ -1464,8 +1464,8 @@ function ExportModal({ model, hasSkeleton, texResolution, onClose }) {
         URL.revokeObjectURL(url)
 
       } else {
-        // ── Cùng format, không downscale → download thẳng file gốc ──────────
-        // OBJ gốc: trả về URL của file .obj, browser tải trực tiếp
+        // ── Same format, no downscale → download original file directly ────────
+        // Original OBJ: returns URL of .obj file, browser downloads directly
         const res = await fetch(model.model_url)
         const blob = await res.blob()
         const url = URL.createObjectURL(blob)
@@ -1504,7 +1504,7 @@ function ExportModal({ model, hasSkeleton, texResolution, onClose }) {
         <div style={{ marginBottom:16 }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
             <span style={{ fontSize:12, color:"#555" }}>Format</span>
-            <span style={{ fontSize:11, color:"#444" }}>Gốc: <span style={{ color:"#888" }}>.{srcFormat.toUpperCase()}</span></span>
+            <span style={{ fontSize:11, color:"#444" }}>Source: <span style={{ color:"#888" }}>.{srcFormat.toUpperCase()}</span></span>
           </div>
           <div style={{ position:"relative" }}>
             <select value={format} onChange={e => setFormat(e.target.value)}
@@ -1516,22 +1516,22 @@ function ExportModal({ model, hasSkeleton, texResolution, onClose }) {
           </div>
           {needsConvert && format === "OBJ" && srcFormat === "glb" && (
             <div style={{ fontSize:11, color:"#f5a623", marginTop:6 }}>
-              ⚠ GLB → OBJ sẽ tải về dạng <strong>.zip</strong> (gồm .obj + .mtl + textures)
+              ⚠ GLB → OBJ will be downloaded as <strong>.zip</strong> (includes .obj + .mtl + textures)
             </div>
           )}
           {needsConvert && format === "OBJ" && srcFormat === "stl" && (
             <div style={{ fontSize:11, color:"#888", marginTop:6 }}>
-              STL → OBJ sẽ tải về file <strong>.obj</strong> (không có material)
+              STL → OBJ will be downloaded as <strong>.obj</strong> (no material)
             </div>
           )}
           {needsConvert && format === "GLB" && (
             <div style={{ fontSize:11, color:"#f5a623", marginTop:6 }}>
-              ⚠ {srcFormat.toUpperCase()} → GLB sẽ được convert tự động (có thể mất vài giây)
+              ⚠ {srcFormat.toUpperCase()} → GLB will be auto-converted (may take a few seconds)
             </div>
           )}
           {needsConvert && format === "STL" && (
             <div style={{ fontSize:11, color:"#888", marginTop:6 }}>
-              ⚠ STL không lưu màu/texture — chỉ giữ lại geometry
+              ⚠ STL does not store color/texture — geometry only
             </div>
           )}
         </div>
@@ -1541,10 +1541,10 @@ function ExportModal({ model, hasSkeleton, texResolution, onClose }) {
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
             <span style={{ fontSize:12, color:"#555" }}>Texture Resolution</span>
             {texResolution === "none"
-              ? <span style={{ fontSize:11, color:"#444" }}>Không có texture</span>
+              ? <span style={{ fontSize:11, color:"#444" }}>No texture</span>
               : texResolution
-              ? <span style={{ fontSize:11, color:"#7c6ef5" }}>Gốc: {texResolution}</span>
-              : <span style={{ fontSize:11, color:"#444", fontStyle:"italic" }}>Đang đọc...</span>
+              ? <span style={{ fontSize:11, color:"#7c6ef5" }}>Source: {texResolution}</span>
+              : <span style={{ fontSize:11, color:"#444", fontStyle:"italic" }}>Loading...</span>
             }
           </div>
           <div style={{ display:"flex", gap:8 }}>
@@ -1555,7 +1555,7 @@ function ExportModal({ model, hasSkeleton, texResolution, onClose }) {
                 <button key={r}
                   onClick={() => !tooHigh && setTexRes(r)}
                   disabled={tooHigh}
-                  title={tooHigh ? `Model chỉ có ${texResolution}` : r}
+                  title={tooHigh ? `Model only has ${texResolution}` : r}
                   style={{ flex:1, padding:"8px 0", fontSize:12,
                     border:`1px solid ${active?"#7c6ef5":"#222"}`,
                     borderRadius:8,
@@ -1572,7 +1572,7 @@ function ExportModal({ model, hasSkeleton, texResolution, onClose }) {
           </div>
           {texRes !== texResolution && texResolution && (
             <div style={{ fontSize:11, color:"#f5a623", marginTop:6 }}>
-              ↓ Sẽ downscale từ {texResolution} xuống {texRes}
+              ↓ Will downscale from {texResolution} to {texRes}
             </div>
           )}
         </div>
@@ -1601,7 +1601,7 @@ function ExportModal({ model, hasSkeleton, texResolution, onClose }) {
         <button onClick={handleExport} disabled={downloading}
           style={{ width:"100%", padding:"12px 0", borderRadius:99, background:downloading?"#2a2a2a":"linear-gradient(135deg,#f5c842,#e8a800)", color:downloading?"#555":"#111", fontSize:14, fontWeight:600, border:"none", cursor:downloading?"not-allowed":"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8, fontFamily:"'DM Sans',sans-serif" }}
         >
-          <span>⬇</span> {downloading ? "Đang tải..." : `Export .${downloadExt.toUpperCase()}`}
+          <span>⬇</span> {downloading ? "Downloading..." : `Export .${downloadExt.toUpperCase()}`}
         </button>
       </div>
     </div>
@@ -1619,7 +1619,7 @@ function FeatureModal({ onClose }) {
   const [imagePreview, setImagePreview] = useState(null)
   const [modelFile, setModelFile]   = useState(null)
   const [mtlFile, setMtlFile]       = useState(null)      // File .mtl
-  const [textureFiles, setTextureFiles] = useState([])    // ✅ THÊM: Texture files array
+  const [textureFiles, setTextureFiles] = useState([])    // ✅ ADD: Texture files array
   const [isObjFile, setIsObjFile]   = useState(false)     // Detect .obj
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone]             = useState(false)
@@ -1627,7 +1627,7 @@ function FeatureModal({ onClose }) {
   const imageRef = useRef()
   const modelRef = useRef()
   const mtlRef = useRef()                                 // Ref cho mtl input
-  const textureRef = useRef()                             // ✅ THÊM: Ref cho texture input
+  const textureRef = useRef()                             // ✅ ADD: Ref for texture input
 
   const MAX_IMAGE_MB = 10
   const MAX_MODEL_MB = 50
@@ -1639,11 +1639,11 @@ function FeatureModal({ onClose }) {
     const ext = "." + f.name.split(".").pop().toLowerCase()
     const newErrors = { ...errors }
     if (!ALLOWED_IMAGE_EXT.includes(ext)) {
-      newErrors.image = `Chỉ chấp nhận: JPG, PNG, WEBP`
+      newErrors.image = `Only accepted: JPG, PNG, WEBP`
       setErrors(newErrors); return
     }
     if (f.size > MAX_IMAGE_MB * 1024 * 1024) {
-      newErrors.image = `Ảnh tối đa ${MAX_IMAGE_MB}MB (file này: ${(f.size/1024/1024).toFixed(1)}MB)`
+      newErrors.image = `Image max ${MAX_IMAGE_MB}MB (this file: ${(f.size/1024/1024).toFixed(1)}MB)`
       setErrors(newErrors); return
     }
     delete newErrors.image
@@ -1657,42 +1657,42 @@ function FeatureModal({ onClose }) {
     const ext = "." + f.name.split(".").pop().toLowerCase()
     const newErrors = { ...errors }
     if (!ALLOWED_MODEL_EXT.includes(ext)) {
-      newErrors.model = `Không hỗ trợ .${f.name.split(".").pop().toUpperCase()} — chỉ GLB, OBJ, STL`
+      newErrors.model = `Unsupported .${f.name.split(".").pop().toUpperCase()} — only GLB, OBJ, STL`
       setErrors(newErrors); return
     }
     if (f.size > MAX_MODEL_MB * 1024 * 1024) {
-      newErrors.model = `Model tối đa ${MAX_MODEL_MB}MB (file này: ${(f.size/1024/1024).toFixed(1)}MB)`
+      newErrors.model = `Model max ${MAX_MODEL_MB}MB (this file: ${(f.size/1024/1024).toFixed(1)}MB)`
       setErrors(newErrors); return
     }
     delete newErrors.model
     setErrors(newErrors)
     setModelFile(f)
     
-    // ✅ THÊM: Detect nếu là file .obj
+    // ✅ ADD: Detect if file is .obj
     setIsObjFile(ext === '.obj')
-    // Reset mtl file khi đổi model
+    // Reset mtl file when model changes
     setMtlFile(null)
   }
 
-  // ✅ THÊM: Handle .mtl file upload
+  // ✅ ADD: Handle .mtl file upload
   const handleMtl = (f) => {
     if (!f) return
     const ext = "." + f.name.split(".").pop().toLowerCase()
     
     if (ext !== '.mtl') {
-      alert('Chỉ chấp nhận file .mtl')
+      alert('Only .mtl files are accepted')
       return
     }
     
     if (f.size > 5 * 1024 * 1024) { // 5MB max
-      alert('File .mtl quá lớn (tối đa 5MB)')
+      alert('File .mtl is too large (max 5MB)')
       return
     }
     
     setMtlFile(f)
   }
 
-  // ✅ THÊM: Handle texture files upload (multiple)
+  // ✅ ADD: Handle texture files upload (multiple)
   const handleTextures = (files) => {
     if (!files || files.length === 0) return
     
@@ -1705,10 +1705,10 @@ function FeatureModal({ onClose }) {
         if (f.size <= 20 * 1024 * 1024) { // 20MB per texture
           validFiles.push(f)
         } else {
-          alert(`${f.name} quá lớn (tối đa 20MB)`)
+          alert(`${f.name} is too large (max 20MB)`)
         }
       } else {
-        alert(`${f.name} không phải là file texture hợp lệ`)
+        alert(`${f.name} is not a valid texture file`)
       }
     })
     
@@ -1728,12 +1728,12 @@ function FeatureModal({ onClose }) {
       fd.append("image", imageFile)
       fd.append("model", modelFile)
       
-      // ✅ Upload .mtl nếu có
+      // ✅ Upload .mtl if present
       if (mtlFile) {
         fd.append("mtl", mtlFile)
       }
       
-      // ✅ THÊM: Upload texture files nếu có
+      // ✅ ADD: Upload texture files if present
       if (textureFiles.length > 0) {
         textureFiles.forEach(tex => {
           fd.append("textures", tex)  // Backend expects "textures" as array
@@ -1761,23 +1761,23 @@ function FeatureModal({ onClose }) {
         {done ? (
           <div style={{ textAlign:"center", padding:"40px 0" }}>
             <div style={{ fontSize:48, marginBottom:16 }}>🎉</div>
-            <div style={{ fontSize:16, color:"#fff", fontWeight:500, marginBottom:8 }}>Đã gửi thành công!</div>
-            <div style={{ fontSize:13, color:"#555", marginBottom:24 }}>Model của bạn đang chờ admin duyệt</div>
-            <button onClick={onClose} style={{ background:"#7c6ef5", color:"#fff", border:"none", borderRadius:99, padding:"10px 28px", fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>Đóng</button>
+            <div style={{ fontSize:16, color:"#fff", fontWeight:500, marginBottom:8 }}>Submitted successfully!</div>
+            <div style={{ fontSize:13, color:"#555", marginBottom:24 }}>Your model is pending admin approval</div>
+            <button onClick={onClose} style={{ background:"#7c6ef5", color:"#fff", border:"none", borderRadius:99, padding:"10px 28px", fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>Close</button>
           </div>
         ) : (
           <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
             {/* Model name */}
             <div>
-              <div style={{ fontSize:12, color:"#555", marginBottom:8 }}>Tên Model *</div>
-              <input value={modelName} onChange={e => setModelName(e.target.value)} placeholder="Nhập tên model..." style={{ width:"100%", background:"#141414", border:"1px solid #222", borderRadius:8, padding:"10px 14px", color:"#ccc", fontSize:13, outline:"none", fontFamily:"'DM Sans',sans-serif", boxSizing:"border-box" }} />
+              <div style={{ fontSize:12, color:"#555", marginBottom:8 }}>Model Name *</div>
+              <input value={modelName} onChange={e => setModelName(e.target.value)} placeholder="Enter model name..." style={{ width:"100%", background:"#141414", border:"1px solid #222", borderRadius:8, padding:"10px 14px", color:"#ccc", fontSize:13, outline:"none", fontFamily:"'DM Sans',sans-serif", boxSizing:"border-box" }} />
             </div>
 
 
 
             {/* Categories */}
             <div>
-              <div style={{ fontSize:12, color:"#555", marginBottom:8 }}>Category * <span style={{ color:"#333" }}>(chọn nhiều)</span></div>
+              <div style={{ fontSize:12, color:"#555", marginBottom:8 }}>Category * <span style={{ color:"#333" }}>(select multiple)</span></div>
               <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
                 {ALL_CATS.map(c => (
                   <button key={c} onClick={() => toggleCat(c)}
@@ -1789,13 +1789,13 @@ function FeatureModal({ onClose }) {
 
             {/* Upload image */}
             <div>
-              <div style={{ fontSize:12, color:"#555", marginBottom:8 }}>Ảnh Preview *</div>
+              <div style={{ fontSize:12, color:"#555", marginBottom:8 }}>Preview Image *</div>
               <div style={{ height:140, border:`2px dashed ${errors.image?"#f87171":"#1e1e1e"}`, borderRadius:10, background:"#141414", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", overflow:"hidden", position:"relative" }}
                 onClick={() => imageRef.current.click()}>
                 <input ref={imageRef} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={e => handleImage(e.target.files[0])} />
                 {imagePreview
                   ? <img src={imagePreview} alt="preview" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
-                  : <div style={{ textAlign:"center", color:"#333" }}><div style={{ fontSize:24, marginBottom:8 }}>🖼</div><div style={{ fontSize:12 }}>Click để chọn ảnh</div><div style={{ fontSize:11, color:"#2a2a2a", marginTop:4 }}>JPG, PNG, WEBP · tối đa {MAX_IMAGE_MB}MB</div></div>
+                  : <div style={{ textAlign:"center", color:"#333" }}><div style={{ fontSize:24, marginBottom:8 }}>🖼</div><div style={{ fontSize:12 }}>Click to select image</div><div style={{ fontSize:11, color:"#2a2a2a", marginTop:4 }}>JPG, PNG, WEBP · max {MAX_IMAGE_MB}MB</div></div>
                 }
               </div>
               {errors.image && <div style={{ fontSize:11, color:"#f87171", marginTop:6 }}>⚠ {errors.image}</div>}
@@ -1810,17 +1810,17 @@ function FeatureModal({ onClose }) {
                 <input ref={modelRef} type="file" accept=".glb,.obj,.stl" hidden onChange={e => handleModel(e.target.files[0])} />
                 <span style={{ fontSize:20 }}>📦</span>
                 <div>
-                  <div style={{ fontSize:13, color:modelFile?"#ccc":"#444" }}>{modelFile ? modelFile.name : "Click để chọn file 3D..."}</div>
+                  <div style={{ fontSize:13, color:modelFile?"#ccc":"#444" }}>{modelFile ? modelFile.name : "Click to select 3D file..."}</div>
                   {modelFile
                     ? <div style={{ fontSize:11, color:"#555", marginTop:2 }}>{(modelFile.size/1024/1024).toFixed(1)}MB</div>
-                    : <div style={{ fontSize:11, color:"#2a2a2a", marginTop:2 }}>GLB, OBJ, STL · tối đa {MAX_MODEL_MB}MB</div>
+                    : <div style={{ fontSize:11, color:"#2a2a2a", marginTop:2 }}>GLB, OBJ, STL · max {MAX_MODEL_MB}MB</div>
                   }
                 </div>
               </div>
               {errors.model && <div style={{ fontSize:11, color:"#f87171", marginTop:6 }}>⚠ {errors.model}</div>}
             </div>
 
-            {/* Upload .mtl file - CHỈ HIỆN KHI CHỌN .OBJ */}
+            {/* Upload .mtl file - ONLY SHOWN WHEN .OBJ IS SELECTED */}
             {isObjFile && (
               <div>
                 <div style={{ fontSize:12, color:"#555", marginBottom:8 }}>
@@ -1849,7 +1849,7 @@ function FeatureModal({ onClose }) {
                   <span style={{ fontSize:20 }}>🎨</span>
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:13, color: mtlFile ? "#ccc" : "#444" }}>
-                      {mtlFile ? mtlFile.name : "Click để chọn file .mtl..."}
+                      {mtlFile ? mtlFile.name : "Click to select .mtl file..."}
                     </div>
                     {mtlFile ? (
                       <div style={{ fontSize:11, color:"#555", marginTop:2 }}>
@@ -1882,7 +1882,7 @@ function FeatureModal({ onClose }) {
               </div>
             )}
 
-            {/* Upload Texture files - CHỈ HIỆN KHI CHỌN .OBJ */}
+            {/* Upload Texture files - ONLY SHOWN WHEN .OBJ IS SELECTED */}
             {isObjFile && (
               <div>
                 <div style={{ fontSize:12, color:"#555", marginBottom:8 }}>
@@ -1914,7 +1914,7 @@ function FeatureModal({ onClose }) {
                     {textureFiles.length > 0 ? (
                       <>
                         <div style={{ fontSize:13, color:"#ccc" }}>
-                          {textureFiles.length} file(s) đã chọn
+                          {textureFiles.length} file(s) selected
                         </div>
                         <div style={{ fontSize:11, color:"#555", marginTop:2 }}>
                           {textureFiles.map(f => f.name).join(', ')}
@@ -1923,10 +1923,10 @@ function FeatureModal({ onClose }) {
                     ) : (
                       <>
                         <div style={{ fontSize:13, color:"#444" }}>
-                          Click để chọn texture images...
+                          Click to select texture images...
                         </div>
                         <div style={{ fontSize:11, color:"#2a2a2a", marginTop:2 }}>
-                          Các file texture được tham chiếu trong .mtl · tối đa 20MB/file
+                          Texture files referenced in .mtl · max 20MB/file
                         </div>
                       </>
                     )}
@@ -1956,7 +1956,7 @@ function FeatureModal({ onClose }) {
             <button onClick={handleSubmit} disabled={submitting || !modelName || !imageFile || !modelFile || selectedCats.length===0}
               style={{ padding:"12px 0", borderRadius:99, background:submitting||!modelName||!imageFile||!modelFile||selectedCats.length===0?"#1a1a1a":"linear-gradient(135deg,#7c6ef5,#5650cc)", color:submitting||!modelName||!imageFile||!modelFile||selectedCats.length===0?"#444":"#fff", fontSize:14, fontWeight:600, border:"none", cursor:submitting||!modelName||!imageFile||!modelFile||selectedCats.length===0?"not-allowed":"pointer", fontFamily:"'DM Sans',sans-serif", transition:"all 0.2s" }}
             >
-              {submitting ? "Đang gửi..." : "Gửi lên Gallery"}
+              {submitting ? "Submitting..." : "Submit to Gallery"}
             </button>
           </div>
         )}
@@ -1967,7 +1967,7 @@ function FeatureModal({ onClose }) {
 
 
 /* ─────────────────────────────────────────────
-   VIEWER GIZMO  — sync với camera Three.js
+   VIEWER GIZMO  — synced with Three.js camera
 ───────────────────────────────────────────── */
 function ViewerGizmo({ cameraQuatRef }) {
   const SIZE   = 56
@@ -1977,7 +1977,7 @@ function ViewerGizmo({ cameraQuatRef }) {
   const svgRef = useRef(null)
   const rafRef = useRef(null)
 
-  // Xoay vector v bởi nghịch đảo quaternion q (q^-1 = [-x,-y,-z,w])
+  // Rotate vector v by the conjugate of quaternion q (q^-1 = [-x,-y,-z,w])
   function rotateByConjugate(v, q) {
     const qx = -q.x, qy = -q.y, qz = -q.z, qw = q.w
     const tx = 2*(qy*v[2] - qz*v[1])
@@ -1998,21 +1998,21 @@ function ViewerGizmo({ cameraQuatRef }) {
     const AXES = [
       { id:"X", world:[1,0,0] },
       { id:"Y", world:[0,1,0] },
-      { id:"Z", world:[0,0,-1] }, // Three.js: -Z đi vào màn hình
+      { id:"Z", world:[0,0,-1] }, // Three.js: -Z goes into the screen
     ]
 
     const loop = () => {
       rafRef.current = requestAnimationFrame(loop)
       const q = cameraQuatRef.current
 
-      // Sort axes by depth (z) để vẽ trục xa trước, gần sau
+      // Sort axes by depth (z) to draw far axes first, near axes last
       const projected = AXES.map(({ id, world }) => {
         const r = rotateByConjugate(world, q)
         return { id, r, ex: C + r[0]*LEN, ey: C - r[1]*LEN }
       }).sort((a, b) => a.r[2] - b.r[2])
 
       projected.forEach(({ id, ex, ey, r }, i) => {
-        const opacity = r[2] < -0.1 ? "0.35" : "1"   // trục bị che mờ đi
+        const opacity = r[2] < -0.1 ? "0.35" : "1"   // axis is occluded, fade it out
         const line   = svg.querySelector(`[data-gizmo="${id}-line"]`)
         const dot    = svg.querySelector(`[data-gizmo="${id}-dot"]`)
         const label  = svg.querySelector(`[data-gizmo="${id}-label"]`)
