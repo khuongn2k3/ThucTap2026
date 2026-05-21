@@ -59,6 +59,7 @@ echo "  ✓ Download project tu HuggingFace"
 echo "  ✓ Compile CUDA modules (hunyuan3d-2mv)"
 echo "  ✓ Create database & tables"
 echo "  ✓ Generate full .env file"
+echo "  ✓ Install frontend (Node.js + npm)"
 echo ""
 echo -e "${YELLOW}⏱️  Thoi gian uoc tinh: 30-50 phut${NC}"
 echo -e "${YELLOW}💾 Download: tu HuggingFace (khuongn2k3/khuong_mv)${NC}"
@@ -124,7 +125,7 @@ START_TIME=$(date +%s)
 # STEP 0: Pre-flight checks
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[0/10] PRE-FLIGHT CHECKS${NC}"
+echo -e "${MAGENTA}[0/11] PRE-FLIGHT CHECKS${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 if ! curl -s --max-time 5 https://google.com > /dev/null; then
@@ -200,7 +201,7 @@ sleep 1
 # STEP 1: Install system packages
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[1/10] INSTALLING SYSTEM PACKAGES${NC}"
+echo -e "${MAGENTA}[1/11] INSTALLING SYSTEM PACKAGES${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 apt update -qq
@@ -225,7 +226,7 @@ echo -e "${GREEN}✅ System packages installed (Python $(python3.10 --version))$
 # STEP 2: Setup MySQL
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[2/10] SETTING UP MYSQL${NC}"
+echo -e "${MAGENTA}[2/11] SETTING UP MYSQL${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 service mysql start || true
@@ -260,7 +261,7 @@ echo -e "${CYAN}   Password saved to: ~/hunyuan3d_setup/mysql_credentials.txt${N
 # STEP 3: Create Python 3.10 virtual environment
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[3/10] CREATING VIRTUAL ENVIRONMENT (Python 3.10)${NC}"
+echo -e "${MAGENTA}[3/11] CREATING VIRTUAL ENVIRONMENT (Python 3.10)${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 if [ -d "venv" ]; then
@@ -290,7 +291,7 @@ echo -e "${GREEN}✅ pip upgraded${NC}"
 # STEP 4: Detect CUDA & Install PyTorch
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[4/10] CONFIGURING PYTORCH FOR CUDA${NC}"
+echo -e "${MAGENTA}[4/11] CONFIGURING PYTORCH FOR CUDA${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 if [[ $CUDA_VERSION == 12.4* ]]; then
@@ -325,7 +326,7 @@ fi
 # STEP 5: Install Python dependencies
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[5/10] INSTALLING PYTHON DEPENDENCIES${NC}"
+echo -e "${MAGENTA}[5/11] INSTALLING PYTHON DEPENDENCIES${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 if python -c "import fastapi, uvicorn, sqlalchemy" 2>/dev/null; then
@@ -366,7 +367,7 @@ else:
 # STEP 6: Download project tu HuggingFace
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[6/10] DOWNLOADING & EXTRACTING FROM HUGGINGFACE${NC}"
+echo -e "${MAGENTA}[6/11] DOWNLOADING & EXTRACTING FROM HUGGINGFACE${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 MV_DIR="./hunyuan3d-2mv"
@@ -438,7 +439,7 @@ echo -e "${YELLOW}Verifying hunyuan3d-2mv structure...${NC}"
 # STEP 7: Setup PYTHONPATH cho hunyuan3d-2mv
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[7/10] CONFIGURING PYTHONPATH${NC}"
+echo -e "${MAGENTA}[7/11] CONFIGURING PYTHONPATH${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 VENV_ACTIVATE="venv/bin/activate"
@@ -503,7 +504,7 @@ except ImportError as e:
 # STEP 8: Compile CUDA modules (hunyuan3d-2mv)
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[8/10] COMPILING CUDA MODULES${NC}"
+echo -e "${MAGENTA}[8/11] COMPILING CUDA MODULES${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 pip install fake-bpy-module-latest > /dev/null 2>&1
@@ -576,7 +577,7 @@ fi
 # STEP 9: Create directories
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[9/10] CREATING DIRECTORIES${NC}"
+echo -e "${MAGENTA}[9/11] CREATING DIRECTORIES${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 mkdir -p utils/upload_temp utils/download utils/models_cache utils/gallery/images utils/gallery/models logs
@@ -587,7 +588,7 @@ echo -e "${GREEN}✅ Directories created${NC}"
 # STEP 10: Generate .env + Init database
 # ==========================================
 echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
-echo -e "${MAGENTA}[10/10] GENERATING .ENV & INITIALIZING DATABASE${NC}"
+echo -e "${MAGENTA}[10/11] GENERATING .ENV & INITIALIZING DATABASE${NC}"
 echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
 
 SECRET_KEY=$(openssl rand -hex 32)
@@ -733,6 +734,65 @@ except Exception as e:
 echo -e "${GREEN}✅ Database initialized${NC}"
 
 # ==========================================
+# STEP 11: Install Frontend (Node.js + npm)
+# ==========================================
+echo -e "\n${MAGENTA}═══════════════════════════════════════${NC}"
+echo -e "${MAGENTA}[11/11] INSTALLING FRONTEND (Node.js + npm)${NC}"
+echo -e "${MAGENTA}═══════════════════════════════════════${NC}\n"
+
+# Tìm thư mục frontend-react
+FRONTEND_DIR=""
+for TRY_DIR in \
+    "$(dirname "$(pwd)")/frontend-react" \
+    "../frontend-react" \
+    "../../frontend-react" \
+    "../frontend"
+do
+    if [ -f "$TRY_DIR/package.json" ]; then
+        FRONTEND_DIR=$(realpath "$TRY_DIR")
+        break
+    fi
+done
+
+if [ -z "$FRONTEND_DIR" ]; then
+    echo -e "${YELLOW}⚠️  Không tìm thấy frontend-react/package.json — bỏ qua Step 11${NC}"
+    echo -e "${YELLOW}   Chạy thủ công: cd frontend-react && npm install${NC}"
+else
+    echo -e "${CYAN}   Frontend dir: $FRONTEND_DIR${NC}"
+
+    # Cài Node.js nếu chưa có (LTS via NodeSource)
+    if ! command -v node &>/dev/null; then
+        echo -e "${YELLOW}Node.js chưa có, đang cài LTS...${NC}"
+        curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - > /dev/null 2>&1
+        apt install -y nodejs > /dev/null 2>&1
+        echo -e "${GREEN}✅ Node.js $(node -v) installed${NC}"
+    else
+        echo -e "${GREEN}✅ Node.js $(node -v) đã có sẵn${NC}"
+    fi
+
+    echo -e "${GREEN}✅ npm $(npm -v)${NC}"
+
+    # npm install — không cần venv, tự cô lập trong node_modules/
+    echo -e "${YELLOW}Đang chạy npm install (lần đầu ~1-2 phút)...${NC}"
+    pushd "$FRONTEND_DIR" > /dev/null
+    npm install --prefer-offline 2>&1 | tail -5
+    echo -e "${GREEN}✅ npm install hoàn tất${NC}"
+
+    # Build production bundle
+    echo -e "${YELLOW}Đang build production bundle (npm run build)...${NC}"
+    npm run build 2>&1 | tail -5
+    echo -e "${GREEN}✅ Frontend built → $FRONTEND_DIR/dist/${NC}"
+
+    popd > /dev/null
+
+    echo ""
+    echo -e "${CYAN}ℹ️  Chạy dev server frontend:${NC}"
+    echo "   cd $FRONTEND_DIR && npm run dev"
+    echo -e "${CYAN}ℹ️  Hoặc serve production build:${NC}"
+    echo "   cd $FRONTEND_DIR && npm run preview"
+fi
+
+# ==========================================
 # DONE!
 # ==========================================
 END_TIME=$(date +%s)
@@ -756,6 +816,11 @@ echo -e "${GREEN}🚀 Khoi dong server:${NC}"
 echo ""
 echo "  source venv/bin/activate"
 echo "  python run_api.py"
+echo ""
+echo -e "${GREEN}🌐 Khoi dong frontend (tab moi):${NC}"
+echo ""
+echo "  cd ../frontend-react && npm run dev"
+echo "  # hoặc: npm run preview  (production build)"
 echo ""
 echo -e "${YELLOW}⚠️  Lan inference dau cham hon (model dang load vao VRAM)${NC}"
 echo -e "${CYAN}📄 Credentials: ~/hunyuan3d_setup/${NC}"

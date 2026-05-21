@@ -139,6 +139,29 @@ npm run dev
 
 Frontend truy cập qua URL tunnel của port 3000 (dạng `https://xxxx-xxxx-xxxx-xxxx.trycloudflare.com`)
 
+### Chạy song song bằng tmux (vast.ai)
+
+vast.ai tự khởi động tmux khi SSH vào server — không cần tạo session mới. Dùng `Ctrl+B C` để tạo window mới cho mỗi service.
+
+**Window 1 — Backend:**
+```bash
+cd /workspace/ThucTap2026/api_base
+source venv/bin/activate && python run_api.py
+```
+
+**Window 2 — Frontend** (nhấn `Ctrl+B C` để tạo window mới):
+```bash
+cd /workspace/ThucTap2026/frontend-react && npm run dev
+```
+
+**Phím tắt tmux hay dùng:**
+
+| Phím | Tác dụng |
+|---|---|
+| `Ctrl+B C` | Tạo window mới |
+| `Ctrl+B 0 / 1 / 2` | Chuyển qua lại giữa các window |
+| `Ctrl+B D` | Detach — thoát khỏi tmux, các process vẫn chạy nền |
+
 ---
 
 ## 🗂️ Cấu trúc thư mục
