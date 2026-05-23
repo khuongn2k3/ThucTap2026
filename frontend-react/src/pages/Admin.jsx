@@ -902,6 +902,33 @@ function SectionApiKeys() {
         <StatCard title="Total Calls"  value={totalCalls}   color="indigo"  icon="" />
       </div>
 
+      {/* Pricing Info */}
+      <div style={{ background: "#fff", borderRadius: 16, padding: "18px 22px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", border: "1px solid #f0f0f0", marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>API Quota Pricing</div>
+            <div style={{ fontSize: 11, color: "#aaa", marginTop: 2 }}>1 quota = 1 full generation call (Stage 1 + Stage 2)</div>
+          </div>
+          <span style={{ background: "#eef2ff", color: "#4f46e5", borderRadius: 8, padding: "4px 12px", fontSize: 12, fontWeight: 600 }}>$0.20 / quota</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+          {[
+            { label: "Starter",  quota: 50,   price: "$10",  per: "$0.20/call" },
+            { label: "Pro",      quota: 200,  price: "$29",  per: "$0.145/call" },
+            { label: "Business", quota: 700,  price: "$79",  per: "$0.113/call" },
+            { label: "Pay-as-go",quota: null, price: "—",    per: "$0.20/call" },
+          ].map(t => (
+            <div key={t.label} style={{ background: "#f9fafb", borderRadius: 10, padding: "12px 14px" }}>
+              <div style={{ fontSize: 11, color: "#888", fontWeight: 500, marginBottom: 4 }}>{t.label}</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "#111" }}>{t.price}</div>
+              {t.quota && <div style={{ fontSize: 11, color: "#7c6ef5", marginTop: 2 }}>{t.quota} quota/mo</div>}
+              <div style={{ fontSize: 10, color: "#bbb", marginTop: 3 }}>{t.per}</div>
+            </div>
+          ))}
+        </div>
+
+      </div>
+
       {/* P1: show action errors inline */}
       {actionError && (
         <div style={{
@@ -1117,6 +1144,20 @@ function SectionApiKeys() {
 }
 
 /* ---- Create / Edit Key Modal ---- */
+const PLANS = [
+  { label: "Starter",   quota: 50,   price: "$10", per: "$0.20/call",  color: "#6366f1", expiryMonths: 1  },
+  { label: "Pro",       quota: 200,  price: "$29", per: "$0.145/call", color: "#7c6ef5", expiryMonths: 12 },
+  { label: "Business",  quota: 700,  price: "$79", per: "$0.113/call", color: "#8b5cf6", expiryMonths: 12 },
+  { label: "Pay-as-go", quota: null, price: "—",   per: "$0.20/call",  color: "#64748b", expiryMonths: null },
+]
+
+function calcExpiry(months) {
+  if (!months) return ""
+  const d = new Date()
+  d.setMonth(d.getMonth() + months)
+  return d.toISOString().slice(0, 10)
+}
+
 function CreateKeyModal({ onClose, onCreated, editKey }) {
   const isEdit = !!editKey
   const [form, setForm] = useState(isEdit ? {
@@ -1126,12 +1167,19 @@ function CreateKeyModal({ onClose, onCreated, editKey }) {
     expires_at:      editKey.expires_at     || "",
     note:            editKey.note           || "",
   } : { name: "", owner_email: "", quota_per_month: "", expires_at: "", note: "" })
+  const [selectedPlan, setSelectedPlan] = useState(null)
   const [loading, setLoading] = useState(false)
   const [newKey, setNewKey]   = useState(null)
   const [copied, setCopied]   = useState(false)
   const [error, setError]     = useState("")
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const applyPlan = (plan) => {
+    setSelectedPlan(plan.label)
+    set("quota_per_month", plan.quota ? String(plan.quota) : "")
+    set("expires_at", calcExpiry(plan.expiryMonths))
+  }
 
   const handleSubmit = async () => {
     if (!form.name.trim()) { setError("Please enter a key name"); return }
@@ -1187,6 +1235,33 @@ function CreateKeyModal({ onClose, onCreated, editKey }) {
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {/* Plan selector — only on create */}
+              {!isEdit && (
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: "#555", marginBottom: 7 }}>Select Plan</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 7 }}>
+                    {PLANS.map(plan => {
+                      const active = selectedPlan === plan.label
+                      return (
+                        <button key={plan.label} onClick={() => applyPlan(plan)} style={{
+                          border: `1.5px solid ${active ? plan.color : "#e5e7eb"}`,
+                          borderRadius: 10, padding: "9px 6px", cursor: "pointer",
+                          background: active ? plan.color + "12" : "#fafafa",
+                          textAlign: "center", fontFamily: "'DM Sans', sans-serif",
+                          transition: "all 0.15s",
+                        }}>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: active ? plan.color : "#555" }}>{plan.label}</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: active ? plan.color : "#111", marginTop: 2 }}>{plan.price}</div>
+                          {plan.quota
+                            ? <div style={{ fontSize: 10, color: active ? plan.color : "#aaa", marginTop: 1 }}>{plan.quota} quota/mo</div>
+                            : <div style={{ fontSize: 10, color: "#aaa", marginTop: 1 }}>pay per call</div>
+                          }
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
               <FormField label="Key Name *" hint='e.g. "Mobile App", "Studio X"'>
                 <input type="text" placeholder="Enter a name to identify this key..." value={form.name}
                   onChange={e => set("name", e.target.value)} style={inputStyle} />

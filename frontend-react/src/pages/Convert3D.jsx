@@ -276,6 +276,7 @@ export default function Convert3D() {
   const [withTexture, setWithTexture]   = useState(true)
   const [texture4k, setTexture4k]       = useState(false)
   const [quality, setQuality]           = useState("standard")
+  const [pricing, setPricing]           = useState({ stage1_tokens: 25, stage2_tokens: 25 })
   const [polycount, setPolycount]       = useState(700000)
   const [guidanceScale, setGuidanceScale] = useState(5.0)
   const [step, setStep]             = useState(STEPS.IDLE)
@@ -331,6 +332,20 @@ export default function Convert3D() {
         .then(res => setCollectedModels(res.data?.models || []))
         .catch(() => {})
     })
+  }, [])
+
+  // Fetch token pricing from admin config
+  useEffect(() => {
+    api.get("/admin/pricing")
+      .then(res => {
+        const d = res.data || {}
+        setPricing(prev => ({
+          ...prev,
+          stage1_tokens: d.stage1_tokens ?? prev.stage1_tokens,
+          stage2_tokens: d.stage2_tokens ?? prev.stage2_tokens,
+        }))
+      })
+      .catch(() => {}) // fallback to default 25/25
   }, [])
   const settingsRef = useRef(null)
   const sseRef = useRef(null)   // giữ EventSource hiện tại để có thể close
@@ -1090,7 +1105,7 @@ export default function Convert3D() {
                 borderRadius: "50%", width: 20, height: 20, fontSize: 10,
                 fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center",
               }}>
-                {quality === "ultra" ? 50 : 25}
+                {withTexture ? pricing.stage1_tokens + pricing.stage2_tokens : pricing.stage1_tokens}
               </span>
             </button>
           )}

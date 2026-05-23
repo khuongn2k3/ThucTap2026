@@ -1150,21 +1150,23 @@ class Hunyuan3DMvService:
 
         # Gọi pipeline với đầy đủ param
         try:
-            # Thử truyền multi-view nếu pipeline hỗ trợ
+            
             if len(all_images) > 1:
                 mesh = self.tex_pipeline(
                     mesh,
                     image=all_images,
+		    guidance_scale=4.0,
                 )
             else:
                 mesh = self.tex_pipeline(
                     mesh,
                     image=front_image,
+		    guidance_scale=4.0,
                 )
         except TypeError:
-            # Fallback: pipeline cũ chỉ nhận image đơn, không nhận extra params
+            
             print(f"⚠️  [{tex_job_id}] Pipeline không hỗ trợ multi-view hoặc extra params, fallback single image")
-            mesh = self.tex_pipeline(mesh, image=front_image)
+            mesh = self.tex_pipeline(mesh, image=front_image,guidance_scale=4.0)
 
         save_dir = Path(settings.DOWNLOAD_DIR)
         output_path = save_dir / f"{tex_job_id}.glb"
