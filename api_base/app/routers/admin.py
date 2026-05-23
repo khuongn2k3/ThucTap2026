@@ -1,13 +1,13 @@
 """
-Admin router — Quản lý hệ thống (admin only).
+Admin router — System management (admin only).
 
 Endpoints:
-  GET   /api/v1/admin/stats                  — Thống kê tổng quan
-  GET   /api/v1/admin/users                  — Danh sách người dùng
-  PATCH /api/v1/admin/users/{id}/role        — Đổi role user
-  PATCH /api/v1/admin/users/{id}/ban         — Khóa / mở khóa tài khoản
-  PATCH /api/v1/admin/users/{id}/tokens      — Cộng / trừ tokens
-  GET   /api/v1/admin/jobs                   — Danh sách jobs toàn hệ thống
+  GET   /api/v1/admin/stats                  — System overview stats
+  GET   /api/v1/admin/users                  — List all users
+  PATCH /api/v1/admin/users/{id}/role        — Change user role
+  PATCH /api/v1/admin/users/{id}/ban         — Ban / unban account
+  PATCH /api/v1/admin/users/{id}/tokens      — Add / subtract tokens
+  GET   /api/v1/admin/jobs                   — List all jobs
 """
 
 from datetime import datetime
@@ -23,6 +23,7 @@ from app.models.base_db import get_db
 from app.models.task import ModelJob
 from app.models.user import User
 from app.security.security import get_current_admin
+from app.services.hunyuan3d_mv_service import hunyuan3d_mv_service
 
 router = APIRouter(tags=["Admin"])
 
@@ -54,7 +55,7 @@ class UpdateBanRequest(BaseModel):
 
 
 class UpdateTokensRequest(BaseModel):
-    delta: int  # Dương = cộng, âm = trừ
+    delta: int  # Positive = add, negative = subtract
 
 
 class PricingConfig(BaseModel):
@@ -91,11 +92,7 @@ async def get_stats(
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ):
-    """
-    Thống kê tổng quan hệ thống.
-
-    Trả về số lượng: users, jobs, đang processing, đã failed.
-    """
+    """System overview stats — total users, jobs, processing, failed."""
     total_users = db.query(User).count()
     total_jobs = db.query(ModelJob).count()
     processing = db.query(ModelJob).filter(ModelJob.status == "processing").count()
@@ -118,7 +115,7 @@ async def list_users(
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ):
-    """Danh sách toàn bộ người dùng (Admin only)."""
+    """List all users (admin only)."""
     users = db.query(User).order_by(User.created_at.desc()).all()
     return {
         "users": [
@@ -148,15 +145,15 @@ async def update_user_role(
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ):
-    """Đổi role của người dùng giữa 'user' và 'admin'."""
+    """Change a user's role between 'user' and 'admin'."""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="Người dùng không tồn tại")
+        raise HTTPException(status_code=404, detail="User not found")
 
     if user.id == admin.id:
         raise HTTPException(
             status_code=400,
-            detail="Không thể tự thay đổi role của chính mình",
+            detail="Cannot change your own role",
         )
 
     user.role = request.role
@@ -164,7 +161,7 @@ async def update_user_role(
     db.refresh(user)
 
     return {
-        "message": f"Đã cập nhật role của {user.name} thành '{request.role}'",
+        "message": f"Updated role of {user.name} to '{request.role}'",
         "user_id": user_id,
         "role": user.role,
     }
@@ -181,30 +178,29 @@ async def update_user_ban(
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ):
-    """Khóa hoặc mở khóa tài khoản người dùng."""
+    """Ban or unban a user account."""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="Người dùng không tồn tại")
+        raise HTTPException(status_code=404, detail="User not found")
 
     if user.id == admin.id:
         raise HTTPException(
             status_code=400,
-            detail="Không thể tự khóa tài khoản của chính mình",
+            detail="Cannot ban your own account",
         )
 
-    # Gán is_banned — dùng setattr để tương thích nếu cột chưa được migrate
     if not hasattr(user, "is_banned"):
         raise HTTPException(
             status_code=500,
-            detail="Cột is_banned chưa được thêm vào DB. Chạy migration trước.",
+            detail="Column 'is_banned' not found in DB. Run migration first.",
         )
 
     user.is_banned = request.banned
     db.commit()
 
-    action = "khóa" if request.banned else "mở khóa"
+    action = "banned" if request.banned else "unbanned"
     return {
-        "message": f"Đã {action} tài khoản {user.name}",
+        "message": f"Account {user.name} has been {action}",
         "user_id": user_id,
         "is_banned": request.banned,
     }
@@ -222,19 +218,19 @@ async def update_user_tokens(
     admin: User = Depends(get_current_admin),
 ):
     """
-    Cộng hoặc trừ tokens của người dùng.
+    Add or subtract tokens from a user.
 
-    - **delta**: Số tokens cần thay đổi. Dương = cộng, âm = trừ.
+    - **delta**: Amount to change. Positive = add, negative = subtract.
     """
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="Người dùng không tồn tại")
+        raise HTTPException(status_code=404, detail="User not found")
 
     new_tokens = user.tokens + request.delta
     if new_tokens < 0:
         raise HTTPException(
             status_code=400,
-            detail=f"Không đủ tokens. Hiện tại: {user.tokens}, trừ: {abs(request.delta)}",
+            detail=f"Insufficient tokens. Current: {user.tokens}, subtract: {abs(request.delta)}",
         )
 
     user.tokens = new_tokens
@@ -243,7 +239,7 @@ async def update_user_tokens(
 
     action = f"+{request.delta}" if request.delta >= 0 else str(request.delta)
     return {
-        "message": f"Đã cập nhật tokens của {user.name} ({action})",
+        "message": f"Updated tokens for {user.name} ({action})",
         "user_id": user_id,
         "tokens": user.tokens,
         "delta": request.delta,
@@ -277,7 +273,7 @@ def _save_pricing(data: dict):
 
 @router.get("/pricing")
 async def get_pricing(admin: User = Depends(get_current_admin)):
-    """Lấy cấu hình giá token hiện tại."""
+    """Get current token pricing config."""
     return _load_pricing()
 
 
@@ -286,15 +282,11 @@ async def update_pricing(
     body: PricingConfig,
     admin: User = Depends(get_current_admin),
 ):
-    """Cập nhật giá token cho Stage 1, Stage 2, bonus đăng ký, bonus hàng ngày."""
+    """Update token pricing for Stage 1, Stage 2, signup bonus, and daily bonus."""
     data = body.model_dump()
     _save_pricing(data)
-    return {"message": "Đã lưu cấu hình giá token", **data}
+    return {"message": "Token pricing config saved", **data}
 
-
-# =========================================
-# GET /jobs
-# =========================================
 
 # =========================================
 # DELETE /users/{user_id}
@@ -306,26 +298,23 @@ async def delete_user(
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ):
-    """Xóa người dùng và toàn bộ job của họ (Admin only)."""
+    """Delete a user and all their jobs (admin only)."""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="Người dùng không tồn tại")
+        raise HTTPException(status_code=404, detail="User not found")
 
     if user.id == admin.id:
         raise HTTPException(
             status_code=400,
-            detail="Không thể tự xóa tài khoản của chính mình",
+            detail="Cannot delete your own account",
         )
 
-    # Xóa hết job của user trước
     db.query(ModelJob).filter(ModelJob.user_id == user_id).delete()
-
-    # Rồi mới xóa user
     db.delete(user)
     db.commit()
 
     return {
-        "message": f"Đã xóa tài khoản {user.name} và toàn bộ job liên quan",
+        "message": f"Deleted account {user.name} and all related jobs",
         "user_id": user_id,
     }
 
@@ -338,30 +327,29 @@ async def delete_user(
 async def list_jobs(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    status: Optional[str] = Query(None, description="pending | processing | completed | failed"),
+    status: Optional[str] = Query(None, description="pending | processing | completed | failed | cancelled"),
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ):
     """
-    Danh sách toàn bộ jobs 3D trong hệ thống (Admin only).
+    List all 3D jobs in the system (admin only).
 
-    Hỗ trợ phân trang và lọc theo trạng thái.
+    Supports pagination and filtering by status.
     """
     query = db.query(ModelJob)
 
     if status and status != "all":
-        valid_statuses = {"pending", "processing", "completed", "failed"}
+        valid_statuses = {"pending", "processing", "completed", "failed", "cancelled"}
         if status not in valid_statuses:
             raise HTTPException(
                 status_code=400,
-                detail=f"Status không hợp lệ. Chọn một trong: {', '.join(valid_statuses)}",
+                detail=f"Invalid status. Choose one of: {', '.join(valid_statuses)}",
             )
         query = query.filter(ModelJob.status == status)
 
     total = query.count()
     jobs = query.order_by(ModelJob.created_at.desc()).offset(offset).limit(limit).all()
 
-    # Lấy user names theo batch để tránh N+1 query
     user_ids = list({j.user_id for j in jobs if j.user_id is not None})
     users_map: dict[int, str] = {}
     if user_ids:
@@ -389,4 +377,57 @@ async def list_jobs(
             }
             for j in jobs
         ],
+    }
+
+
+# =========================================
+# POST /jobs/{job_id}/cancel
+# =========================================
+
+CANCELLABLE_STATUSES = {"pending", "processing"}
+
+
+@router.post("/jobs/{job_id}/cancel")
+async def cancel_job(
+    job_id: str,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """
+    Cancel a pending or running job (admin only).
+
+    - Only jobs with status **pending** or **processing** can be cancelled.
+    - Already completed, failed, or cancelled jobs will be rejected.
+    - Tokens are refunded to the user if applicable.
+    """
+    job = db.query(ModelJob).filter(ModelJob.job_id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.status not in CANCELLABLE_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot cancel job with status '{job.status}'. Only pending or processing jobs can be cancelled.",
+        )
+
+    refunded_tokens = 0
+    if job.user_id and job.tokens_used and job.tokens_used > 0:
+        user = db.query(User).filter(User.id == job.user_id).first()
+        if user:
+            user.tokens = user.tokens + job.tokens_used
+            refunded_tokens = job.tokens_used
+
+    job.status = "cancelled"
+    job.completed_at = datetime.utcnow()
+    job.error_message = "Cancelled by admin"
+
+    db.commit()
+
+    await hunyuan3d_mv_service.request_cancel(job_id)
+
+    return {
+        "message": f"Job {job_id} has been cancelled",
+        "job_id": job_id,
+        "status": "cancelled",
+        "refunded_tokens": refunded_tokens,
     }

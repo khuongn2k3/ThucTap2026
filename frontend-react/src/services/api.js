@@ -154,6 +154,10 @@ export function openJobSSE(jobId, { onProgress, onCompleted, onFailed, onHeartbe
           clearInterval(pollTimer)
           closed = true
           if (onFailed) onFailed(data)
+        } else if (data.status === "cancelled") {
+          clearInterval(pollTimer)
+          closed = true
+          if (onFailed) onFailed({ ...data, message: "Job was cancelled." })
         } else {
           if (onProgress) onProgress({ message: data.message || "Processing..." })
         }

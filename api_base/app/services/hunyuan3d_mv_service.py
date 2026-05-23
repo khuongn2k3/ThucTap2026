@@ -34,7 +34,7 @@ try:
     from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline
     from hy3dgen.texgen import Hunyuan3DPaintPipeline
     HUNYUAN3D_MV_AVAILABLE = True
-    print(f"✅ Hunyuan3D-2mv imported from {MV_DIR}")
+    print(f"Hunyuan3D-2mv imported from {MV_DIR}")
 except ImportError as e:
     print(f"⚠️  Hunyuan3D-2mv import failed: {e}")
     BackgroundRemover = None
@@ -261,11 +261,18 @@ class Hunyuan3DMvService:
             # ── SSE Queue registry ───────────────────────────────────────
             # Map job_id → asyncio.Queue
             # Queue item format: dict with keys: event, data
-            # event: "progress" | "completed" | "failed" | "heartbeat"
+            # event: "progress" | "completed" | "failed" | "heartbeat" | "cancelled"
             self._sse_queues: Dict[str, asyncio.Queue] = {}
 
+            # ── Cancel registry ──────────────────────────────────────────
+            # Set chứa job_id đã được yêu cầu hủy.
+            # Worker và background tasks check set này để:
+            #   - Pending: bỏ qua khi pull từ queue (không tốn VRAM)
+            #   - Processing: unload pipeline ngay sau khi inference xong
+            self._cancelled_jobs: set = set()
+
             self._initialized = True
-            print("🎨 Hunyuan3D-2mv Service initialized (singleton)")
+            print("Hunyuan3D-2mv Service initialized (singleton)")
             self._load_eta_stats()
 
     # ────────────────────────────────────────────────────────────────────────
@@ -286,6 +293,32 @@ class Hunyuan3DMvService:
         """Xóa queue sau khi SSE connection đóng."""
         self._sse_queues.pop(job_id, None)
 
+    async def request_cancel(self, job_id: str):
+        """
+        Yêu cầu hủy một job.
+
+        Hành vi tùy theo trạng thái job:
+        • **pending** (đang chờ trong queue): bị bỏ qua khi worker pull ra,
+          không tốn VRAM, giải phóng ngay lập tức.
+        • **processing** (pipeline đang chạy trên GPU): không thể ngắt GPU
+          kernel giữa chừng — nhưng ngay khi inference step hiện tại kết thúc,
+          pipeline sẽ bị unload và VRAM được giải phóng, thay vì tiếp tục
+          lưu file / tạo thumbnail / gallery submission như bình thường.
+
+        Trong cả hai trường hợp, DB status đã được set thành 'cancelled'
+        bởi admin endpoint trước khi method này được gọi.
+        """
+        self._cancelled_jobs.add(job_id)
+        if job_id in self.task_cache:
+            self.task_cache[job_id]["cancel_requested"] = True
+
+        # Push SSE để frontend biết ngay (nếu user đang xem job)
+        await self._push_event_async(job_id, "cancelled", {
+            "job_id":  job_id,
+            "message": "Job đã bị hủy bởi admin",
+        })
+        print(f"Cancel requested: {job_id}")
+
     @staticmethod
     def _safe_put_nowait(q, item: dict):
         """Gọi từ call_soon_threadsafe — catch QueueFull silently."""
@@ -302,6 +335,10 @@ class Hunyuan3DMvService:
         Phải truyền `loop` (lấy từ asyncio.get_running_loop() trong coroutine).
         Nếu gọi từ coroutine thì dùng _push_event_async thay thế.
         """
+        pct = data.get("percent", "")
+        msg = data.get("message", "")
+        pct_str = f" {pct}%" if pct != "" else ""
+        print(f"[SSE] {job_id[:12]} | {event}{pct_str} | {msg}")
         q = self._sse_queues.get(job_id)
         if q is None:
             return  # client chưa connect SSE hoặc đã disconnect
@@ -317,6 +354,10 @@ class Hunyuan3DMvService:
     async def _push_event_async(self, job_id: str, event: str, data: Dict[str, Any]):
         """Push event từ coroutine (async context)."""
         q = self._sse_queues.get(job_id)
+        pct = data.get("percent", "")
+        msg = data.get("message", "")
+        pct_str = f" {pct}%" if pct != "" else ""
+        print(f"[SSE] {job_id[:12]} | {event}{pct_str} | {msg}")
         if q is None:
             return
         try:
@@ -399,6 +440,13 @@ class Hunyuan3DMvService:
             job_type = descriptor["type"]  # "shape" hoặc "texture"
             required = SHAPE_VRAM_REQUIRED_GB if job_type == "shape" else TEXTURE_VRAM_REQUIRED_GB
 
+            # 🛑 Job đã bị hủy trong lúc chờ queue → bỏ qua, không tốn VRAM
+            if job_id in self._cancelled_jobs:
+                self._cancelled_jobs.discard(job_id)
+                self.task_cache.pop(job_id, None)
+                print(f"⏭️  [{job_id}] Job đã bị hủy khi còn pending — bỏ qua, VRAM không bị dùng")
+                continue
+
             # Kiểm tra VRAM trước khi chạy
             while True:
                 res = _get_resources()
@@ -408,7 +456,7 @@ class Hunyuan3DMvService:
                     break
                 await self._push_event_async(job_id, "progress", {
                     "stage": job_type, "step": "waiting_vram",
-                    "message": f"⏳ Chờ VRAM... (cần {required}GB, còn {free:.1f}GB)",
+                    "message": f"Chờ VRAM... (cần {required}GB, còn {free:.1f}GB)",
                 })
                 await asyncio.sleep(10)
 
@@ -471,7 +519,7 @@ class Hunyuan3DMvService:
         self._unload_texture()
         print("🚀 Loading shape pipeline (hunyuan3d-dit-v2-mv-fast)...")
         await asyncio.get_running_loop().run_in_executor(None, self._load_shape)
-        print("✅ Shape pipeline ready!")
+        print("Shape pipeline ready!")
 
     async def initialize_tex_pipeline(self):
         if not HUNYUAN3D_MV_AVAILABLE:
@@ -481,7 +529,7 @@ class Hunyuan3DMvService:
         self._unload_shape()
         print("🚀 Loading texture pipeline (hunyuan3d-paint-v2-0-turbo)...")
         await asyncio.get_running_loop().run_in_executor(None, self._load_tex)
-        print("✅ Texture pipeline ready!")
+        print("Texture pipeline ready!")
 
     def _load_shape(self):
         self.shape_pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
@@ -509,7 +557,7 @@ class Hunyuan3DMvService:
         # thì self.rembg = None → bỏ qua remove background → texture sai.
         if self.rembg is None:
             self.rembg = BackgroundRemover()
-            print("✅ BackgroundRemover loaded alongside texture pipeline")
+            print("BackgroundRemover loaded alongside texture pipeline")
 	
 
     # ────────────────────────────────────────────────────────────────────────
@@ -549,7 +597,7 @@ class Hunyuan3DMvService:
             back_image_url=back_image_url,
         )
         db.add(job); db.commit(); db.refresh(job)
-        print(f"✅ [Stage 1] Shape job created: {job_id}")
+        print(f"[Stage 1] Shape job created: {job_id}")
 
         self.task_cache[job_id] = {"status": "pending", "stage": "shape"}
         self.create_queue(job_id)
@@ -574,7 +622,7 @@ class Hunyuan3DMvService:
 
         await self._push_event_async(job_id, "progress", {
             "stage": "shape", "step": "queued",
-            "message": f"⏳ Đang xếp hàng (vị trí {queue_position})...",
+            "message": f"Đang xếp hàng (vị trí {queue_position})...",
             "queue_position": queue_position,
         })
 
@@ -599,7 +647,7 @@ class Hunyuan3DMvService:
             # Push ETA ngay khi bắt đầu — trước khi load pipeline
             await self._push_event_async(job_id, "progress", {
                 "stage": "shape", "step": "start",
-                "message": "🔷 Stage 1 bắt đầu — đang chuẩn bị pipeline...",
+                "message": "Stage 1 bắt đầu — đang chuẩn bị pipeline...",
                 "eta_seconds": self._get_eta("shape"),
             })
 
@@ -609,7 +657,7 @@ class Hunyuan3DMvService:
                 print("🚀 Loading shape pipeline...")
                 loop_load = asyncio.get_running_loop()
                 await loop_load.run_in_executor(None, self._load_shape)
-                print("✅ Shape pipeline ready!")
+                print("Shape pipeline ready!")
 
             pil_images = self._decode_images(images_base64, remove_background)
 
@@ -619,7 +667,7 @@ class Hunyuan3DMvService:
 
             await self._push_event_async(job_id, "progress", {
                 "stage": "shape", "step": "pipeline",
-                "message": f"⚙️  Đang chạy shape pipeline ({num_inference_steps} steps)...",
+                "message": f"Đang chạy shape pipeline ({num_inference_steps} steps)...",
                 "vram_free_gb": res_before.get("vram_free_gb"),
             })
 
@@ -640,6 +688,20 @@ class Hunyuan3DMvService:
             _log_resources(f"[{job_id}] Stage 1 DONE", res_before, res_after, duration)
             metrics = _build_metrics(res_before, res_after, duration)
             self._record_duration("shape", duration)
+
+            # 🛑 Check cancel: inference xong nhưng job đã bị hủy trong lúc GPU chạy
+            # Giải phóng VRAM ngay, bỏ qua save/thumbnail/gallery
+            if job_id in self._cancelled_jobs:
+                self._cancelled_jobs.discard(job_id)
+                self._unload_shape()
+                self.task_cache.pop(job_id, None)
+                print(f"[{job_id}] Shape inference xong nhưng job đã bị hủy — unload VRAM, bỏ qua save")
+                await self._push_event_async(job_id, "cancelled", {
+                    "stage": "shape",
+                    "message": "Job đã bị hủy, VRAM đã giải phóng",
+                    "vram_freed": True,
+                })
+                return  # finally sẽ set done_event → worker tiếp tục job kế
 
             output_url = f"{settings.EXTERNAL_URL}/api/v1/download/{job_id}/white"
 
@@ -715,7 +777,7 @@ class Hunyuan3DMvService:
                 "output_model_url": output_url,
                 "submission_id": submission_id,
                 "metrics": metrics,
-                "message": f"✅ Stage 1 xong! ({duration:.0f}s)",
+                "message": f"Stage 1 xong! ({duration:.0f}s)",
             })
 
         except Exception as e:
@@ -729,9 +791,9 @@ class Hunyuan3DMvService:
             # SSE: thông báo lỗi
             await self._push_event_async(job_id, "failed", {
                 "stage": "shape", "error": str(e),
-                "message": f"❌ Stage 1 thất bại: {e}",
+                "message": f"Stage 1 thất bại: {e}",
             })
-            print(f"❌ [Stage 1] {job_id} failed: {e}")
+            print(f"[Stage 1] {job_id} failed: {e}")
         finally:
             db.close()
             if done_event:
@@ -742,12 +804,12 @@ class Hunyuan3DMvService:
                   loop: asyncio.AbstractEventLoop = None) -> Path:
         """Chạy trong thread pool. Dùng _push_event (thread-safe) để push SSE."""
         import torch
-        print(f"⚙️  [{job_id}] Running shape pipeline (guidance_scale={guidance_scale})...")
+        print(f"[{job_id}] Running shape pipeline (guidance_scale={guidance_scale})...")
 
         # Push progress từ thread — thread-safe qua call_soon_threadsafe
         self._push_event(job_id, "progress", {
             "stage": "shape", "step": "diffusion",
-            "message": "🧠 Diffusion model đang chạy...",
+            "message": "Diffusion model đang chạy...",
         }, loop=loop)
 
         mesh = self.shape_pipeline(
@@ -763,20 +825,20 @@ class Hunyuan3DMvService:
         if polycount and polycount > 0:
             self._push_event(job_id, "progress", {
                 "stage": "shape", "step": "decimate",
-                "message": f"✂️  Decimating mesh → {polycount:,} faces...",
+                "message": f"Decimating mesh → {polycount:,} faces...",
             }, loop=loop)
             mesh = self._decimate_mesh(job_id, mesh, polycount)
 
         self._push_event(job_id, "progress", {
             "stage": "shape", "step": "save",
-            "message": "💾 Đang lưu white mesh...",
+            "message": "Đang lưu white mesh...",
         }, loop=loop)
 
         save_dir = Path(settings.DOWNLOAD_DIR)
         save_dir.mkdir(parents=True, exist_ok=True)
         output_path = save_dir / f"{job_id}.white.glb"
         mesh.export(str(output_path))
-        print(f"💾 [{job_id}] White mesh saved → {output_path}")
+        print(f"[{job_id}] White mesh saved → {output_path}")
         return output_path
 
     def _decimate_mesh(self, job_id: str, mesh, target_faces: int):
@@ -818,7 +880,7 @@ class Hunyuan3DMvService:
             _ = decimated.vertex_normals.copy()  # ensure normals flushed to buffer
 
             actual_faces = len(decimated.faces)
-            print(f"✅ [{job_id}] Decimation done: {actual_faces:,} faces | "
+            print(f"[{job_id}] Decimation done: {actual_faces:,} faces | "
                   f"has_normals={np.any(decimated.vertex_normals)}")
 
             os.unlink(tmp_in_path)
@@ -874,7 +936,7 @@ class Hunyuan3DMvService:
             has_texture=False, model_name=model_name,
         )
         db.add(tex_job); db.commit(); db.refresh(tex_job)
-        print(f"✅ [Stage 2] Texture job created: {tex_job_id} (shape: {shape_job_id})")
+        print(f"[Stage 2] Texture job created: {tex_job_id} (shape: {shape_job_id})")
 
         self.task_cache[tex_job_id] = {
             "status": "pending", "stage": "texture", "shape_job_id": shape_job_id,
@@ -897,7 +959,7 @@ class Hunyuan3DMvService:
 
         await self._push_event_async(tex_job_id, "progress", {
             "stage": "texture", "step": "queued",
-            "message": f"⏳ Đang xếp hàng (vị trí {queue_position})...",
+            "message": f"Đang xếp hàng (vị trí {queue_position})...",
             "queue_position": queue_position,
         })
 
@@ -920,8 +982,8 @@ class Hunyuan3DMvService:
 
             # Push ETA ngay khi bắt đầu — trước khi load pipeline
             await self._push_event_async(tex_job_id, "progress", {
-                "stage": "texture", "step": "start",
-                "message": "🎨 Stage 2 bắt đầu — đang chuẩn bị pipeline...",
+                "stage": "texture", "step": "start", "percent": 5,
+                "message": "Stage 2 bắt đầu — đang chuẩn bị pipeline...",
                 "eta_seconds": self._get_eta("texture"),
             })
 
@@ -934,14 +996,14 @@ class Hunyuan3DMvService:
                     loop_load.run_in_executor(None, self._load_tex),
                     timeout=300  # Bug1 fix: timeout 5 phút cho load model
                 )
-                print("✅ Texture pipeline ready!")
+                print("Texture pipeline ready!")
 
             # Decode front image + rembg nếu còn background
             front_image = Image.open(BytesIO(base64.b64decode(front_image_base64))).convert("RGBA")
             if self.rembg is not None:
                 try:
                     front_image = self.rembg(front_image)
-                    print(f"✅ [{tex_job_id}] Front image background removed")
+                    print(f"[{tex_job_id}] Front image background removed")
                 except Exception as rb_err:
                     print(f"⚠️  [{tex_job_id}] rembg failed, dùng ảnh gốc: {rb_err}")
 
@@ -967,8 +1029,8 @@ class Hunyuan3DMvService:
             print(f"\n🎨 [{tex_job_id}] Stage 2 START (4K={texture_4k})")
 
             await self._push_event_async(tex_job_id, "progress", {
-                "stage": "texture", "step": "pipeline",
-                "message": f"🖌️  Đang chạy texture pipeline (4K={texture_4k})...",
+                "stage": "texture", "step": "pipeline", "percent": 20,
+                "message": f"Đang chạy texture pipeline (4K={texture_4k})...",
                 "vram_free_gb": res_before.get("vram_free_gb"),
             })
 
@@ -989,6 +1051,20 @@ class Hunyuan3DMvService:
             _log_resources(f"[{tex_job_id}] Stage 2 DONE", res_before, res_after, duration)
             metrics = _build_metrics(res_before, res_after, duration)
             self._record_duration("texture", duration)
+
+            # 🛑 Check cancel: texture inference xong nhưng job đã bị hủy
+            # Unload pipeline ngay, bỏ qua lưu file và gallery
+            if tex_job_id in self._cancelled_jobs:
+                self._cancelled_jobs.discard(tex_job_id)
+                self._unload_texture()
+                self.task_cache.pop(tex_job_id, None)
+                print(f"[{tex_job_id}] Texture inference xong nhưng job đã bị hủy — unload VRAM, bỏ qua save")
+                await self._push_event_async(tex_job_id, "cancelled", {
+                    "stage": "texture",
+                    "message": "Job đã bị hủy, VRAM đã giải phóng",
+                    "vram_freed": True,
+                })
+                return  # finally sẽ set done_event → worker tiếp tục job kế
 
             self._unload_texture()
 
@@ -1083,10 +1159,10 @@ class Hunyuan3DMvService:
                 "output_model_url": output_url,
                 "submission_id": submission_id,
                 "metrics": metrics,
-                "message": f"✅ Stage 2 xong! ({duration:.0f}s)",
+                "message": f"Stage 2 xong! ({duration:.0f}s)",
             })
 
-            print(f"✅ [Stage 2] {tex_job_id} done | texture={has_texture}")
+            print(f"[Stage 2] {tex_job_id} done | texture={has_texture}")
 
         except (Exception, asyncio.TimeoutError) as e:
             import traceback; traceback.print_exc()
@@ -1107,17 +1183,17 @@ class Hunyuan3DMvService:
                 await self._push_event_async(tex_job_id, "completed", {
                     "stage": "texture",
                     "output_model_url": output_url,
-                    "message": "✅ Stage 2 xong (recovered after timeout)!",
+                    "message": "Stage 2 xong (recovered after timeout)!",
                 })
-                print(f"✅ [Stage 2] {tex_job_id} recovered → completed")
+                print(f"[Stage 2] {tex_job_id} recovered → completed")
             else:
                 if job:
                     job.status = 'failed'; job.error_message = str(e); db.commit()
                 await self._push_event_async(tex_job_id, "failed", {
                     "stage": "texture", "error": str(e),
-                    "message": f"❌ Stage 2 thất bại: {e}",
+                    "message": f"Stage 2 thất bại: {e}",
                 })
-                print(f"❌ [Stage 2] {tex_job_id} failed: {e}")
+                print(f"[Stage 2] {tex_job_id} failed: {e}")
         finally:
             db.close()
             if done_event:
@@ -1129,11 +1205,11 @@ class Hunyuan3DMvService:
         """Chạy trong thread pool. Dùng _push_event (thread-safe)."""
         import trimesh
         white_mesh_path = Path(settings.DOWNLOAD_DIR) / f"{shape_job_id}.white.glb"
-        print(f"⚙️  [{tex_job_id}] Loading white mesh + running texture pipeline...")
+        print(f"[{tex_job_id}] Loading white mesh + running texture pipeline...")
 
         self._push_event(tex_job_id, "progress", {
-            "stage": "texture", "step": "paint",
-            "message": "🖌️  Đang sơn texture lên mesh...",
+            "stage": "texture", "step": "paint", "percent": 25,
+            "message": "Đang sơn texture lên mesh...",
         }, loop=loop)
 
         mesh = trimesh.load(str(white_mesh_path))
@@ -1144,9 +1220,14 @@ class Hunyuan3DMvService:
             for view in ["right", "back", "left"]:
                 if view in extra_images:
                     all_images.append(extra_images[view])
-            print(f"✅ [{tex_job_id}] Texture với {len(all_images)} view(s): front + {list(extra_images.keys())}")
+            print(f"[{tex_job_id}] Texture với {len(all_images)} view(s): front + {list(extra_images.keys())}")
         else:
-            print(f"✅ [{tex_job_id}] Texture với 1 view (front only)")
+            print(f"[{tex_job_id}] Texture với 1 view (front only)")
+
+        self._push_event(tex_job_id, "progress", {
+            "stage": "texture", "step": "diffusion", "percent": 30,
+            "message": "Diffusion multiview đang chạy (30 steps)...",
+        }, loop=loop)
 
         # Gọi pipeline với đầy đủ param
         try:
@@ -1155,28 +1236,33 @@ class Hunyuan3DMvService:
                 mesh = self.tex_pipeline(
                     mesh,
                     image=all_images,
-		    guidance_scale=4.0,
+		    
                 )
             else:
                 mesh = self.tex_pipeline(
                     mesh,
                     image=front_image,
-		    guidance_scale=4.0,
+		    
                 )
         except TypeError:
             
             print(f"⚠️  [{tex_job_id}] Pipeline không hỗ trợ multi-view hoặc extra params, fallback single image")
-            mesh = self.tex_pipeline(mesh, image=front_image,guidance_scale=4.0)
+            mesh = self.tex_pipeline(mesh, image=front_image)
+
+        self._push_event(tex_job_id, "progress", {
+            "stage": "texture", "step": "export", "percent": 80,
+            "message": "Đang export GLB...",
+        }, loop=loop)
 
         save_dir = Path(settings.DOWNLOAD_DIR)
         output_path = save_dir / f"{tex_job_id}.glb"
         mesh.export(str(output_path))
-        print(f"💾 [{tex_job_id}] Textured mesh saved → {output_path}")
+        print(f"[{tex_job_id}] Textured mesh saved → {output_path}")
 
         if texture_4k:
             self._push_event(tex_job_id, "progress", {
-                "stage": "texture", "step": "upscale",
-                "message": "🔍 Đang upscale texture lên 4K...",
+                "stage": "texture", "step": "upscale", "percent": 90,
+                "message": "Đang upscale texture lên 4K...",
             }, loop=loop)
             output_path = self._upscale_glb_textures(tex_job_id, output_path)
 
@@ -1189,7 +1275,7 @@ class Hunyuan3DMvService:
             import numpy as np
             from PIL import Image as PILImage
 
-            print(f"🔍 [{job_id}] 4K upscale: loading GLB textures...")
+            print(f"[{job_id}] 4K upscale: loading GLB textures...")
             data = glb_path.read_bytes()
 
             if len(data) < 20 or struct.unpack_from('<I', data, 0)[0] != 0x46546C67:
@@ -1288,7 +1374,7 @@ class Hunyuan3DMvService:
 
             output_4k_path = glb_path.parent / f"{glb_path.stem}_4k.glb"
             output_4k_path.write_bytes(header + json_chunk + bin_chunk)
-            print(f"✅ [{job_id}] 4K upscale done → {output_4k_path} ({upscaled_count} textures)")
+            print(f"[{job_id}] 4K upscale done → {output_4k_path} ({upscaled_count} textures)")
             return output_4k_path
 
         except Exception as e:
@@ -1384,6 +1470,8 @@ class Hunyuan3DMvService:
             resp["vertices"] = job.vertices
         elif job.status == "failed":
             resp["error_message"] = job.error_message
+        elif job.status == "cancelled":
+            resp["error_message"] = job.error_message
         return resp
 
     async def delete_job(self, db: Session, job_id: str, user_id: Optional[int] = None) -> Dict[str, Any]:
@@ -1438,6 +1526,15 @@ class Hunyuan3DMvService:
                     d.rmdir()
             except Exception as e:
                 print(f"Failed to remove dir {d}: {e}")
+
+        # ── Notify any active SSE listeners so they disconnect cleanly ──────
+        # Without this, clients stuck in event_generator() keep sending
+        # heartbeats forever (200 OK every 20s) after the job is deleted.
+        if self._sse_queues.get(job_id) is not None:
+            await self._push_event_async(job_id, "cancelled", {
+                "job_id": job_id,
+                "error_message": "Job was deleted",
+            })
 
         db.delete(job)
         db.commit()

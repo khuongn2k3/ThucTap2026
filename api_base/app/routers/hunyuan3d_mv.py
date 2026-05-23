@@ -934,14 +934,16 @@ async def job_progress_sse(job_id: str, request: Request, db: Session = Depends(
     except Exception:
         status_data = {}
 
-    terminal_status = status_data.get("status") in ("completed", "failed", "not_found")
+    terminal_status = status_data.get("status") in ("completed", "failed", "cancelled", "not_found")
 
     if terminal_status:
         event_name = status_data.get("status", "failed")
         # "not_found" không phải SSE event chuẩn → map thành "failed"
         if event_name == "not_found":
             event_name = "failed"
-            status_data.setdefault("error", "Job không tồn tại")
+            status_data.setdefault("error", "Job not found")
+        elif event_name == "cancelled":
+            status_data.setdefault("error_message", "Cancelled by admin")
 
         async def one_shot_generator():
             payload = (
@@ -983,7 +985,7 @@ async def job_progress_sse(job_id: str, request: Request, db: Session = Depends(
 
                 # Đóng stream sau completed/failed
                 # Frontend nhận tín hiệu rõ ràng → trigger Stage 2 hoặc hiện lỗi
-                if event in ("completed", "failed"):
+                if event in ("completed", "failed", "cancelled"):
                     break
 
         except asyncio.CancelledError:

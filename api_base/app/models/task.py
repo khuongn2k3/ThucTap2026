@@ -16,7 +16,7 @@ class ModelJob(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     job_id = Column(String(100), unique=True, nullable=False, index=True)
     status = Column(
-        Enum('pending', 'processing', 'completed', 'failed'),
+        Enum('pending', 'processing', 'completed', 'failed', 'cancelled'),
         nullable=False,
         default='pending',
         index=True

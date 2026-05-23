@@ -604,11 +604,13 @@ function SectionUsers({ currentUser }) {
    SECTION: JOBS 3D
    ============================================================ */
 function SectionJobs() {
-  const [jobs, setJobs]       = useState([])
-  const [loading, setLoading] = useState(true)
-  const [total, setTotal]     = useState(0)
-  const [offset, setOffset]   = useState(0)
+  const [jobs, setJobs]           = useState([])
+  const [loading, setLoading]     = useState(true)
+  const [total, setTotal]         = useState(0)
+  const [offset, setOffset]       = useState(0)
   const [statusFilter, setStatusFilter] = useState("all")
+  const [cancelling, setCancelling]     = useState(null)   // job_id currently being cancelled
+  const [cancelMsg, setCancelMsg]       = useState(null)   // { type: "ok"|"err", text }
   const LIMIT = 20
 
   const fetchJobs = useCallback((off, status) => {
@@ -624,19 +626,54 @@ function SectionJobs() {
   useEffect(() => { setOffset(0); fetchJobs(0, statusFilter) }, [statusFilter])
   useEffect(() => { fetchJobs(offset, statusFilter) }, [offset])
 
+  const handleCancel = async (job) => {
+    if (!window.confirm(`Cancel job ${job.job_id?.slice(0,16)}…?\nTokens used will be refunded to the user.`)) return
+    setCancelling(job.job_id)
+    setCancelMsg(null)
+    try {
+      const res = await api.post(`/admin/jobs/${job.job_id}/cancel`)
+      // Optimistic update: immediately reflect status change in UI
+      setJobs(prev => prev.map(j => j.job_id === job.job_id ? { ...j, status: "cancelled" } : j))
+      const refund = res.data?.refunded_tokens
+      setCancelMsg({ type: "ok", text: `Job cancelled. ${refund ? `Refunded ${refund} tokens.` : ""}` })
+    } catch (e) {
+      setCancelMsg({ type: "err", text: e.response?.data?.detail || "Failed to cancel job." })
+    } finally {
+      setCancelling(null)
+      setTimeout(() => setCancelMsg(null), 4000)
+    }
+  }
+
+  const isCancellable = (status) => status === "pending" || status === "processing"
+
   const totalPages  = Math.ceil(total / LIMIT)
   const currentPage = Math.floor(offset / LIMIT) + 1
-  const STATUS_TABS = ["all","pending","processing","completed","failed"]
-  const TAB_LABELS  = { all:"All", pending:"Pending", processing:"Processing", completed:"Done", failed:"Error" }
+  const STATUS_TABS = ["all","pending","processing","completed","failed","cancelled"]
+  const TAB_LABELS  = { all:"All", pending:"Pending", processing:"Processing", completed:"Done", failed:"Error", cancelled:"Cancelled" }
 
   return (
     <div>
       <PageHeader title="Jobs 3D" subtitle={`${total} jobs in the system`} />
+
+      {/* Status filter tabs */}
       <div className="flex gap-1 mb-4 rounded-xl border border-gray-200 bg-gray-50 p-1 w-fit">
         {STATUS_TABS.map(s => (
           <TabBtn key={s} active={statusFilter === s} onClick={() => setStatusFilter(s)}>{TAB_LABELS[s]}</TabBtn>
         ))}
       </div>
+
+      {/* Toast message */}
+      {cancelMsg && (
+        <div style={{
+          marginBottom: 14, padding: "10px 16px", borderRadius: 10, fontSize: 13,
+          background: cancelMsg.type === "ok" ? "#ecfdf5" : "#fef2f2",
+          color:      cancelMsg.type === "ok" ? "#065f46" : "#991b1b",
+          border: `1px solid ${cancelMsg.type === "ok" ? "#a7f3d0" : "#fecaca"}`,
+        }}>
+          {cancelMsg.type === "ok" ? "✓ " : "✕ "}{cancelMsg.text}
+        </div>
+      )}
+
       {loading ? <LoadingBox /> : (
         <div className="overflow-hidden rounded-2xl bg-white shadow">
           <table className="w-full text-left">
@@ -648,6 +685,7 @@ function SectionJobs() {
                 <th className="px-5 py-3">Tokens Used</th>
                 <th className="px-5 py-3">Created</th>
                 <th className="px-5 py-3">File 3D</th>
+                <th className="px-5 py-3">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -664,6 +702,20 @@ function SectionJobs() {
                     {j.output_model_url
                       ? <a href={j.output_model_url} target="_blank" rel="noreferrer" className="text-indigo-500 hover:underline text-xs">Download</a>
                       : <span className="text-gray-300">—</span>
+                    }
+                  </td>
+                  <td className="px-5 py-3">
+                    {isCancellable(j.status)
+                      ? (
+                        <ActionBtn
+                          onClick={() => handleCancel(j)}
+                          disabled={cancelling === j.job_id}
+                          color="red"
+                        >
+                          {cancelling === j.job_id ? "Cancelling..." : "Cancel"}
+                        </ActionBtn>
+                      )
+                      : <span className="text-gray-300 text-xs">—</span>
                     }
                   </td>
                 </tr>
@@ -1447,8 +1499,8 @@ function ApiKeyStatusBadge({ status }) {
 }
 
 function StatusBadge({ status }) {
-  const map   = { completed:"bg-emerald-100 text-emerald-700", processing:"bg-amber-100 text-amber-700", failed:"bg-red-100 text-red-700", pending:"bg-gray-100 text-gray-500" }
-  const label = { completed:"Completed", processing:"Processing", failed:"Failed", pending:"Pending" }
+  const map   = { completed:"bg-emerald-100 text-emerald-700", processing:"bg-amber-100 text-amber-700", failed:"bg-red-100 text-red-700", pending:"bg-gray-100 text-gray-500", cancelled:"bg-purple-100 text-purple-600" }
+  const label = { completed:"Completed", processing:"Processing", failed:"Failed", pending:"Pending", cancelled:"Cancelled" }
   return <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${map[status] || "bg-gray-100 text-gray-500"}`}>{label[status] || status}</span>
 }
 
