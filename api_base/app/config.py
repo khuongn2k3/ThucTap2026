@@ -60,6 +60,8 @@ class Settings:
     NAME_WEB: str = "HUNYUAN3D"
     SEPAY_API_KEY: str = os.getenv("SEPAY_API_KEY", "")
     SEPAY_WEBHOOK_SECRET: str = os.getenv("SEPAY_WEBHOOK_SECRET", "")
+    BANK_ID: str = os.getenv("BANK_ID", "BIDV")
+    BANK_ACCOUNT: str = os.getenv("BANK_ACCOUNT", "")
     
     # =========================================
     # HUNYUAN3D MODEL

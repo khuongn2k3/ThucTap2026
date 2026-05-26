@@ -249,6 +249,30 @@ export function healthCheck() {
 export default api
 
 // =========================================
+// PAYMENT
+// =========================================
+
+export function getPackages() {
+  return api.get("/payment/packages")
+}
+
+export function createPayment(packageId) {
+  return api.post("/payment/create", { package_id: packageId })
+}
+
+export function checkPaymentStatus(paymentId) {
+  return api.get(`/payment/status/${paymentId}`)
+}
+
+export function getPaymentHistory() {
+  return api.get("/payment/history")
+}
+
+export function getUserTokens() {
+  return api.get("/payment/tokens")
+}
+
+// =========================================
 // ADMIN — API KEYS
 // =========================================
 

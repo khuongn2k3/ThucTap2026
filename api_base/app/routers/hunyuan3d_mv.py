@@ -61,7 +61,7 @@ router = APIRouter()
 # ────────────────────────────────────────────────────────────────────────────
 
 _PRICING_FILE = Path(__file__).resolve().parent.parent / "pricing.json"
-_PRICING_DEFAULTS = {"stage1_tokens": 25, "stage2_tokens": 25}
+_PRICING_DEFAULTS = {"stage1_tokens": 5, "stage2_tokens": 5}
 
 def _get_pricing() -> dict:
     try:

@@ -19,6 +19,13 @@ from app.config import settings
 
 router = APIRouter(prefix="/payment", tags=["Payment"])
 
+
+def generate_sepay_qr(account: str, bank: str, amount: int, content: str) -> str:
+    """Generate SePay QR code URL."""
+    import urllib.parse
+    encoded = urllib.parse.quote(content)
+    return f"https://qr.sepay.vn/img?acc={account}&bank={bank}&amount={amount}&des={encoded}"
+
 # =========================================
 # PAYMENT PACKAGES
 # =========================================
@@ -27,6 +34,7 @@ PACKAGES = {
     "basic": {"tokens": 100, "price_vnd": 50000},
     "pro": {"tokens": 500, "price_vnd": 200000},
     "premium": {"tokens": 1000, "price_vnd": 350000},
+    "admin_test": {"tokens": 1000, "price_vnd": 1000, "admin_only": True},
 }
 
 # =========================================
@@ -84,6 +92,12 @@ async def create_payment(
         )
     
     package = PACKAGES[request.package_id]
+
+    if package.get("admin_only") and current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Package không khả dụng."
+        )
     
     # Create payment record
     payment = Payment(
@@ -114,7 +128,12 @@ async def create_payment(
         tokens=payment.tokens,
         status=payment.status,  # ✅ Đã là string rồi, không cần .value
         transfer_content=transfer_content,
-        qr_code_url=None,  # TODO: Generate QR code
+        qr_code_url=generate_sepay_qr(
+            account=settings.BANK_ACCOUNT,
+            bank=settings.BANK_ID,
+            amount=int(package["price_vnd"]),
+            content=transfer_content
+        ),
         expires_at=payment.expires_at
     )
 
@@ -233,17 +252,22 @@ async def check_sepay_transactions(payment: Payment, db: Session) -> tuple[bool,
 
 
 @router.get("/packages")
-async def get_packages():
+async def get_packages(
+    current_user: User = Depends(get_current_user)
+):
     """Get available payment packages."""
+    is_admin = current_user.role == "admin"
     return {
         "packages": [
             {
                 "id": pkg_id,
                 "tokens": info["tokens"],
                 "price_vnd": info["price_vnd"],
-                "price_formatted": f"{info['price_vnd']:,.0f} VNĐ"
+                "price_formatted": f"{info['price_vnd']:,.0f} VNĐ",
+                "admin_only": info.get("admin_only", False),
             }
             for pkg_id, info in PACKAGES.items()
+            if not info.get("admin_only") or is_admin
         ]
     }
 

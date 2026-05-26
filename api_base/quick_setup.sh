@@ -37,6 +37,24 @@ if [ -z "$HF_TOKEN" ] || [ "$HF_TOKEN" = "YOUR_HUGGINGFACE_TOKEN_HERE" ]; then
     fi
 fi
 
+# ── Nhap SePay payment info ──
+echo -e "${CYAN}💳 Nhap SePay API Key (my.sepay.vn → Tai khoan → API):${NC}"
+read -rp "   SEPAY_API_KEY (Enter de bo qua): " SEPAY_API_KEY
+
+echo -e "${CYAN}💳 Nhap ten web lam noi dung chuyen khoan (VD: FORMA):${NC}"
+read -rp "   NAME_WEB (Enter de dung HUNYUAN3D): " NAME_WEB
+if [ -z "$NAME_WEB" ]; then NAME_WEB="HUNYUAN3D"; fi
+NAME_WEB=$(echo "$NAME_WEB" | tr '[:lower:]' '[:upper:]' | tr -d ' ')
+echo -e "${GREEN}✅ Noi dung CK: ${NAME_WEB}NAPTOKEN XXXXXX${NC}"
+
+echo -e "${CYAN}💳 Nhap ma ngan hang (VD: BIDV, MB, VCB, TCB):${NC}"
+read -rp "   BANK_ID (Enter de dung BIDV): " BANK_ID
+if [ -z "$BANK_ID" ]; then BANK_ID="BIDV"; fi
+BANK_ID=$(echo "$BANK_ID" | tr '[:lower:]' '[:upper:]')
+
+echo -e "${CYAN}💳 Nhap so tai khoan ngan hang:${NC}"
+read -rp "   BANK_ACCOUNT (Enter de bo qua): " BANK_ACCOUNT
+
 clear
 echo -e "${CYAN}"
 cat << "EOF"
@@ -634,8 +652,11 @@ GOOGLE_REDIRECT_URI=$GOOGLE_REDIRECT_URI
 # =========================================
 # 💳 PAYMENT (OPTIONAL)
 # =========================================
-SEPAY_API_KEY=
+SEPAY_API_KEY=$SEPAY_API_KEY
 SEPAY_WEBHOOK_SECRET=
+NAME_WEB=$NAME_WEB
+BANK_ID=$BANK_ID
+BANK_ACCOUNT=$BANK_ACCOUNT
 
 # =========================================
 # 🤖 HUNYUAN3D MODEL CONFIG

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { getMe } from "../services/api"
 import AuthModal from "./AuthModal"
 import ProfileModal from "./ProfileModal"
+import PaymentModal from "./PaymentModal"
 
 const MENU_BY_ROLE = {
   admin: [
@@ -24,6 +25,7 @@ export default function Navbar() {
   const [open, setOpen]           = useState(false)
   const [showAuth, setShowAuth]   = useState(false)
   const [showProfile, setShowProfile] = useState(false)
+  const [showPayment, setShowPayment] = useState(false)
   const isLoggedIn = !!localStorage.getItem("token")
 
   useEffect(() => {
@@ -150,6 +152,17 @@ export default function Navbar() {
                     </button>
 
 
+                    {/* Top up */}
+                    <button className="nb-item" onClick={() => { setOpen(false); setShowPayment(true) }} style={{
+                      display: "flex", alignItems: "center", gap: 9, width: "100%",
+                      padding: "9px 14px", fontSize: 13, color: "#bbb",
+                      background: "none", border: "none", cursor: "pointer",
+                      fontFamily: "'DM Sans',sans-serif", transition: "all 0.15s",
+                    }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                      Top up credits
+                    </button>
+
                     {/* Logout */}
                     <button className="nb-item nb-logout" onClick={handleLogout} style={{
                       display: "flex", alignItems: "center", gap: 9, width: "100%",
@@ -196,6 +209,13 @@ export default function Navbar() {
 
       {showProfile && (
         <ProfileModal onClose={() => setShowProfile(false)} />
+      )}
+
+      {showPayment && (
+        <PaymentModal
+          onClose={() => setShowPayment(false)}
+          onSuccess={() => setUser(prev => ({ ...prev, tokens: (prev?.tokens || 0) }))}
+        />
       )}
     </>
   )
