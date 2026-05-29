@@ -492,9 +492,23 @@ export default function Convert3D() {
   // Dùng localStorage thay sessionStorage — sessionStorage bị clear khi React
   // unmount component trước reload (effect chạy với step=IDLE → removeItem)
   const JOB_KEY = "convert3d_active_job"
-  const saveJob = (step, sjid, ajid) => {
+
+  // Decode JWT để lấy userId — không cần gọi API thêm
+  const getCurrentUserId = () => {
+    const token = localStorage.getItem("token")
+    if (!token) return null
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1]))
+      return payload.sub ?? payload.user_id ?? null
+    } catch { return null }
+  }
+
+  const saveJob = (step, sjid, ajid, extra = {}) => {
     localStorage.setItem(JOB_KEY, JSON.stringify({
       step, shapeJobId: sjid, activeJobId: ajid, withTexture, texture4k,
+      startedAt: Date.now(),
+      userId: getCurrentUserId(),
+      ...extra,
     }))
   }
   const clearJob = () => localStorage.removeItem(JOB_KEY)
@@ -619,8 +633,19 @@ export default function Convert3D() {
     let saved
     try { saved = JSON.parse(raw) } catch { localStorage.removeItem(JOB_KEY); return }
 
-    const { step: sv, shapeJobId: sjid, activeJobId: ajid, withTexture: wt, texture4k: t4k, startedAt } = saved
+    const { step: sv, shapeJobId: sjid, activeJobId: ajid, withTexture: wt, texture4k: t4k, startedAt, userId: savedUserId } = saved
     if (!sjid && !ajid) { localStorage.removeItem(JOB_KEY); return }
+
+    // Nếu job thuộc account khác thì bỏ qua, không xóa
+    // (để khi login lại đúng account cũ thì vẫn restore được)
+    const currentUserId = getCurrentUserId()
+    if (savedUserId && currentUserId && savedUserId !== currentUserId) return
+
+    // Job quá cũ (> 24h) thì xóa luôn — server chắc đã xóa rồi
+    if (startedAt && Date.now() - startedAt > 24 * 60 * 60 * 1000) {
+      localStorage.removeItem(JOB_KEY)
+      return
+    }
 
     // Poll status trước để biết job đang ở đâu + lấy url model nếu đã có
     // Tránh: viewer trống khi reload vì whiteUrl/texUrl đều null
@@ -739,7 +764,7 @@ export default function Convert3D() {
       if (r.data.eta_texture) setEtaS2(r.data.eta_texture)
       setActiveJobId(r.data.job_id)
       setStep(STEPS.S2_POLLING)
-      localStorage.setItem(JOB_KEY, JSON.stringify({ step: STEPS.S2_POLLING, shapeJobId: sjid, activeJobId: r.data.job_id, withTexture: true, texture4k, startedAt: Date.now() }))
+      saveJob(STEPS.S2_POLLING, sjid, r.data.job_id, { withTexture: true })
       doSSE(r.data.job_id, (url, m, sid) => {
         //prefetchModel(url)  // bắt đầu download ngầm ngay khi completed
         setTexUrl(url); setMetrics(m); setActiveJobId(null); setStep(STEPS.DONE)
@@ -765,7 +790,7 @@ export default function Convert3D() {
       if (r.data.eta_texture) setEtaS2(r.data.eta_texture)
       setActiveJobId(r.data.job_id)
       setStep(STEPS.S2_POLLING)
-      localStorage.setItem(JOB_KEY, JSON.stringify({ step: STEPS.S2_POLLING, shapeJobId: sjid, activeJobId: r.data.job_id, withTexture: true, texture4k: !!t4k, startedAt: Date.now() }))
+      saveJob(STEPS.S2_POLLING, sjid, r.data.job_id, { withTexture: true, texture4k: !!t4k })
       doSSE(r.data.job_id, (url, m, sid) => {
         setTexUrl(url); setMetrics(m); setActiveJobId(null)
         setCurrentJobId(r.data.job_id)
@@ -800,7 +825,7 @@ export default function Convert3D() {
       if (r.data.eta_shape)   setEtaS1(r.data.eta_shape)
       if (r.data.eta_texture) setEtaS2(r.data.eta_texture)
       setShapeJobId(jid); setActiveJobId(jid); setStep(STEPS.S1_POLLING)
-      localStorage.setItem(JOB_KEY, JSON.stringify({ step: STEPS.S1_POLLING, shapeJobId: jid, activeJobId: jid, withTexture, texture4k, startedAt: Date.now() }))
+      saveJob(STEPS.S1_POLLING, jid, jid)
       doSSE(jid, (url, m, sid) => {
         //prefetchModel(url)  // bắt đầu download ngầm ngay khi completed
         setWhiteUrl(url); setActiveJobId(null)

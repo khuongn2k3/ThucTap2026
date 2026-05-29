@@ -13,12 +13,14 @@ import api, {
    ============================================================ */
 
 const SECTIONS = [
-  { id: "overview",  label: "Overview",   icon: IconGrid },
-  { id: "users",     label: "Users",  icon: IconUsers },
-  { id: "jobs",      label: "Jobs 3D",     icon: IconCube },
-  { id: "gallery",   label: "Gallery",     icon: IconImage },
-  { id: "pricing",   label: "Token Pricing",   icon: IconCoin },
-  { id: "apikeys",   label: "API Keys",    icon: IconKey },
+  { id: "overview",  label: "Overview",      icon: IconGrid },
+  { id: "users",     label: "Users",         icon: IconUsers },
+  { id: "jobs",      label: "Jobs 3D",       icon: IconCube },
+  { id: "gallery",   label: "Gallery",       icon: IconImage },
+  { id: "pricing",   label: "Token Pricing", icon: IconCoin },
+  { id: "payments",  label: "Payments",      icon: IconPayment },
+  { id: "revenue",   label: "Revenue",      icon: IconRevenue },
+  { id: "apikeys",   label: "API Keys",      icon: IconKey },
 ]
 
 export default function Admin() {
@@ -74,6 +76,8 @@ export default function Admin() {
         {section === "jobs"      && <SectionJobs />}
         {section === "gallery"   && <SectionGallery />}
         {section === "pricing"   && <SectionPricing />}
+        {section === "payments"  && <SectionPayments />}
+        {section === "revenue"   && <SectionRevenue />}
         {section === "apikeys"   && <SectionApiKeys />}
       </main>
     </div>
@@ -872,6 +876,379 @@ function GalleryAll() {
   )
 }
 
+
+/* ============================================================
+   SECTION: PAYMENTS
+   ============================================================ */
+function SectionPayments() {
+  const [payments, setPayments] = useState([])
+  const [stats, setStats]       = useState(null)
+  const [loading, setLoading]   = useState(true)
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [total, setTotal]       = useState(0)
+  const [offset, setOffset]     = useState(0)
+  const LIMIT = 20
+
+  const STATUS_TABS = ["all", "completed", "pending", "expired"]
+  const TAB_LABELS  = { all: "All", completed: "Completed", pending: "Pending", expired: "Expired" }
+
+  const fetchPayments = (off, status) => {
+    setLoading(true)
+    const params = new URLSearchParams({ limit: LIMIT, offset: off })
+    if (status !== "all") params.append("status", status)
+    Promise.all([
+      api.get(`/admin/payments?${params}`),
+      api.get("/admin/payments/stats"),
+    ])
+      .then(([pRes, sRes]) => {
+        setPayments(pRes.data.payments || [])
+        setTotal(pRes.data.total || 0)
+        setStats(sRes.data)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { setOffset(0); fetchPayments(0, statusFilter) }, [statusFilter])
+  useEffect(() => { fetchPayments(offset, statusFilter) }, [offset])
+
+  const totalPages  = Math.ceil(total / LIMIT)
+  const currentPage = Math.floor(offset / LIMIT) + 1
+
+  const fmtVND = (v) => Number(v).toLocaleString("vi-VN") + "đ"
+  const toUTC = (d) => d ? (d.endsWith('Z') || d.includes('+') ? d : d + 'Z') : null
+  const fmtDate = (d) => { const s = toUTC(d); return s ? new Date(s).toLocaleString('vi-VN') : '—' }
+
+  const STATUS_COLOR = {
+    completed: { bg: "#ecfdf5", color: "#059669" },
+    pending:   { bg: "#fffbeb", color: "#d97706" },
+    expired:   { bg: "#f3f4f6", color: "#6b7280" },
+    failed:    { bg: "#fef2f2", color: "#dc2626" },
+  }
+
+  return (
+    <div>
+      <PageHeader title="Payments" subtitle="All top-up transactions" />
+
+      {/* Stats row */}
+      {stats && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12, marginBottom: 20 }}>
+          {[
+            { label: "Total",     value: stats.total,      color: "indigo" },
+            { label: "Completed", value: stats.completed,  color: "emerald" },
+            { label: "Pending",   value: stats.pending,    color: "amber" },
+            { label: "Expired",   value: stats.expired,    color: "red" },
+            { label: "Revenue",   value: fmtVND(stats.revenue_vnd), color: "emerald", wide: true },
+            { label: "Tokens Sold", value: stats.tokens_sold.toLocaleString(), color: "indigo" },
+          ].map(s => {
+            const C = { indigo: ["#eef2ff","#4f46e5"], emerald: ["#ecfdf5","#059669"], amber: ["#fffbeb","#d97706"], red: ["#fef2f2","#dc2626"] }
+            const [bg, text] = C[s.color] || C.indigo
+            return (
+              <div key={s.label} style={{ background: "#fff", borderRadius: 14, padding: "16px 18px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", border: "1px solid #f0f0f0" }}>
+                <div style={{ display: "inline-flex", background: bg, color: text, borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 600, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>{s.label}</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: "#111" }}>{s.value}</div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Status filter tabs */}
+      <div className="flex gap-1 mb-4 rounded-xl border border-gray-200 bg-gray-50 p-1 w-fit">
+        {STATUS_TABS.map(s => (
+          <TabBtn key={s} active={statusFilter === s} onClick={() => setStatusFilter(s)}>{TAB_LABELS[s]}</TabBtn>
+        ))}
+      </div>
+
+      {loading ? <LoadingBox /> : (
+        <div className="overflow-hidden rounded-2xl bg-white shadow">
+          <table className="w-full text-left" style={{ tableLayout: "fixed" }}>
+            <colgroup>
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "18%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "18%" }} />
+              <col style={{ width: "16%" }} />
+            </colgroup>
+            <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
+              <tr>
+                <th className="px-4 py-3">ID</th>
+                <th className="px-4 py-3">User</th>
+                <th className="px-4 py-3">Package</th>
+                <th className="px-4 py-3">Amount</th>
+                <th className="px-4 py-3">Tokens</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Tx ID</th>
+                <th className="px-4 py-3">Date</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {payments.map(p => {
+                const sc = STATUS_COLOR[p.status] || { bg: "#f3f4f6", color: "#6b7280" }
+                return (
+                  <tr key={p.id} className="text-sm hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3 font-mono text-xs text-gray-400">#{p.id}</td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-gray-900 truncate">{p.user_name}</div>
+                      <div className="text-xs text-gray-400 truncate">{p.user_email}</div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-700 capitalize">{p.package_id?.replace("_", " ")}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900">{fmtVND(p.amount_vnd)}</td>
+                    <td className="px-4 py-3 font-mono text-gray-700">+{p.tokens}</td>
+                    <td className="px-4 py-3">
+                      <span style={{ background: sc.bg, color: sc.color, borderRadius: 99, padding: "2px 10px", fontSize: 11, fontWeight: 600 }}>
+                        {p.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs text-gray-400 truncate">{p.sepay_transaction_id || "—"}</td>
+                    <td className="px-4 py-3 text-xs text-gray-400">{fmtDate(p.paid_at || p.created_at)}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          {payments.length === 0 && <EmptyBox text="No payments found" />}
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <div className="mt-6 flex items-center justify-center gap-3">
+          <PageBtn disabled={offset === 0} onClick={() => setOffset(o => Math.max(0, o - LIMIT))}>Prev</PageBtn>
+          <span className="text-sm text-gray-500">{currentPage} / {totalPages}</span>
+          <PageBtn disabled={offset + LIMIT >= total} onClick={() => setOffset(o => o + LIMIT)}>Next</PageBtn>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ============================================================
+   SECTION: REVENUE
+   ============================================================ */
+function SectionRevenue() {
+  const [stats, setStats]         = useState(null)
+  const [payments, setPayments]   = useState([])
+  const [loading, setLoading]     = useState(true)
+  const [period, setPeriod]       = useState("month") // month | week | all
+  const [offset, setOffset]       = useState(0)
+  const [total, setTotal]         = useState(0)
+  const LIMIT = 20
+
+  const fmtVND = (v) => Number(v || 0).toLocaleString("vi-VN") + "đ"
+  const toUTC  = (d) => d ? (d.endsWith('Z') || d.includes('+') ? d : d + 'Z') : null
+  const fmtDate = (d) => { const s = toUTC(d); return s ? new Date(s).toLocaleString('vi-VN') : '—' }
+
+  const fetchData = (off = 0) => {
+    setLoading(true)
+    const params = new URLSearchParams({ limit: LIMIT, offset: off, status: "completed" })
+    Promise.all([
+      api.get("/admin/payments/stats"),
+      api.get(`/admin/payments?${params}`),
+    ])
+      .then(([sRes, pRes]) => {
+        setStats(sRes.data)
+        setPayments(pRes.data.payments || [])
+        setTotal(pRes.data.total || 0)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { setOffset(0); fetchData(0) }, [period])
+  useEffect(() => { fetchData(offset) }, [offset])
+
+  // Build monthly revenue bar chart from completed payments
+  const monthlyData = (() => {
+    const now = new Date()
+    const months = Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1)
+      return {
+        label: d.toLocaleDateString("en-US", { month: "short" }),
+        month: d.getMonth(),
+        year: d.getFullYear(),
+        value: 0,
+      }
+    })
+    payments.filter(p => p.status === "completed").forEach(p => {
+      const d = new Date(toUTC(p.paid_at || p.created_at))
+      const m = months.find(x => x.month === d.getMonth() && x.year === d.getFullYear())
+      if (m) m.value += p.amount_vnd || 0
+    })
+    return months
+  })()
+
+  const maxBar = Math.max(...monthlyData.map(d => d.value), 1)
+
+  const totalPages  = Math.ceil(total / LIMIT)
+  const currentPage = Math.floor(offset / LIMIT) + 1
+
+  // Conversion rate
+  const convRate = stats ? ((stats.completed / (stats.total || 1)) * 100).toFixed(1) : "—"
+
+  return (
+    <div>
+      <PageHeader title="Revenue" subtitle="Financial overview and payment transactions" />
+
+      {loading && !stats ? <LoadingBox /> : (
+        <>
+          {/* KPI Cards */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 20 }}>
+            {[
+              { label: "Total Revenue", value: fmtVND(stats?.revenue_vnd), color: "#10b981", bg: "#ecfdf5" },
+              { label: "Completed Payments", value: stats?.completed ?? 0, color: "#4f46e5", bg: "#eef2ff" },
+              { label: "Tokens Sold", value: Number(stats?.tokens_sold ?? 0).toLocaleString(), color: "#7c6ef5", bg: "#f5f3ff" },
+              { label: "Conversion Rate", value: convRate + "%", color: "#f59e0b", bg: "#fffbeb" },
+            ].map(s => (
+              <div key={s.label} style={{
+                background: "#fff", borderRadius: 16, padding: "20px 22px",
+                boxShadow: "0 1px 4px rgba(0,0,0,0.06)", border: "1px solid #f0f0f0",
+              }}>
+                <div style={{ display: "inline-flex", background: s.bg, color: s.color, borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 600, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}>{s.label}</div>
+                <div style={{ fontSize: 24, fontWeight: 700, color: s.color }}>{s.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Charts row */}
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 14, marginBottom: 20 }}>
+
+            {/* Monthly Revenue Bar Chart */}
+            <div style={{ background: "#fff", borderRadius: 16, padding: "22px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", border: "1px solid #f0f0f0" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>Revenue — Last 6 Months</div>
+                  <div style={{ fontSize: 11, color: "#aaa", marginTop: 2 }}>Completed transactions only</div>
+                </div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#10b981" }}>{fmtVND(stats?.revenue_vnd)}</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 80, marginBottom: 8 }}>
+                {monthlyData.map((d, i) => {
+                  const h = Math.max(4, Math.round((d.value / maxBar) * 80))
+                  const isLast = i === monthlyData.length - 1
+                  return (
+                    <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                      <div title={fmtVND(d.value)} style={{
+                        width: "100%", borderRadius: 5,
+                        height: h,
+                        background: isLast ? "#10b981" : "#10b98144",
+                        transition: "height 0.3s", cursor: "default",
+                        position: "relative",
+                      }} />
+                    </div>
+                  )
+                })}
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                {monthlyData.map((d, i) => (
+                  <div key={i} style={{ flex: 1, textAlign: "center" }}>
+                    <div style={{ fontSize: 9, color: "#bbb" }}>{d.label}</div>
+                    {d.value > 0 && <div style={{ fontSize: 9, color: "#10b981", marginTop: 1 }}>{(d.value / 1000000).toFixed(1)}M</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Payment Status Breakdown */}
+            <div style={{ background: "#fff", borderRadius: 16, padding: "22px 24px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", border: "1px solid #f0f0f0" }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#111", marginBottom: 16 }}>Payment Breakdown</div>
+              {stats && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {[
+                    { label: "Completed", value: stats.completed, color: "#10b981" },
+                    { label: "Pending",   value: stats.pending,   color: "#f59e0b" },
+                    { label: "Expired",   value: stats.expired,   color: "#9ca3af" },
+                  ].map(s => {
+                    const pct = stats.total ? Math.round((s.value / stats.total) * 100) : 0
+                    return (
+                      <div key={s.label}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                          <span style={{ fontSize: 12, color: "#555" }}>{s.label}</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: s.color }}>{s.value} <span style={{ color: "#bbb", fontWeight: 400 }}>({pct}%)</span></span>
+                        </div>
+                        <div style={{ height: 6, borderRadius: 99, background: "#f3f4f6", overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: pct + "%", background: s.color, borderRadius: 99, transition: "width 0.5s" }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                  <div style={{ marginTop: 8, paddingTop: 12, borderTop: "1px solid #f5f5f5" }}>
+                    <div style={{ fontSize: 11, color: "#aaa", marginBottom: 4 }}>Total transactions</div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: "#111" }}>{stats.total}</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Completed Transactions Table */}
+          <div style={{ background: "#fff", borderRadius: 16, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", border: "1px solid #f0f0f0", overflow: "hidden" }}>
+            <div style={{ padding: "18px 22px", borderBottom: "1px solid #f5f5f5", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>Completed Transactions</div>
+                <div style={{ fontSize: 11, color: "#aaa", marginTop: 2 }}>{total} successful payments</div>
+              </div>
+            </div>
+            {loading ? <LoadingBox /> : (
+              <table className="w-full text-left" style={{ tableLayout: "fixed" }}>
+                <colgroup>
+                  <col style={{ width: "6%" }} />
+                  <col style={{ width: "22%" }} />
+                  <col style={{ width: "13%" }} />
+                  <col style={{ width: "13%" }} />
+                  <col style={{ width: "10%" }} />
+                  <col style={{ width: "18%" }} />
+                  <col style={{ width: "18%" }} />
+                </colgroup>
+                <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
+                  <tr>
+                    <th className="px-4 py-3">ID</th>
+                    <th className="px-4 py-3">Customer</th>
+                    <th className="px-4 py-3">Package</th>
+                    <th className="px-4 py-3">Amount</th>
+                    <th className="px-4 py-3">Tokens</th>
+                    <th className="px-4 py-3">Transaction ID</th>
+                    <th className="px-4 py-3">Date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {payments.filter(p => p.status === "completed").map(p => (
+                    <tr key={p.id} className="text-sm hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3 font-mono text-xs text-gray-400">#{p.id}</td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-gray-900 truncate">{p.user_name}</div>
+                        <div className="text-xs text-gray-400 truncate">{p.user_email}</div>
+                      </td>
+                      <td className="px-4 py-3 text-gray-700 capitalize text-xs">{p.package_id?.replace("_", " ")}</td>
+                      <td className="px-4 py-3 font-semibold text-emerald-600">{fmtVND(p.amount_vnd)}</td>
+                      <td className="px-4 py-3 font-mono text-gray-700">+{p.tokens}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-gray-400 truncate">{p.sepay_transaction_id || "—"}</td>
+                      <td className="px-4 py-3 text-xs text-gray-400">{fmtDate(p.paid_at || p.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {payments.filter(p => p.status === "completed").length === 0 && !loading && (
+              <EmptyBox text="No completed transactions yet" />
+            )}
+          </div>
+
+          {totalPages > 1 && (
+            <div className="mt-6 flex items-center justify-center gap-3">
+              <PageBtn disabled={offset === 0} onClick={() => setOffset(o => Math.max(0, o - LIMIT))}>Prev</PageBtn>
+              <span className="text-sm text-gray-500">{currentPage} / {totalPages}</span>
+              <PageBtn disabled={offset + LIMIT >= total} onClick={() => setOffset(o => o + LIMIT)}>Next</PageBtn>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 /* ============================================================
    SECTION: API KEYS
    ============================================================ */
@@ -1590,6 +1967,12 @@ function IconImage({ size=16, color="currentColor" }) {
 }
 function IconKey({ size=16, color="currentColor" }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="M21 2l-9.6 9.6"/><path d="M15.5 7.5l3 3L21 8l-3-3"/></svg>
+}
+function IconPayment({ size=16, color="currentColor" }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+}
+function IconRevenue({ size=16, color="currentColor" }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
 }
 function IconCoin({ size=16, color="currentColor" }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v2m0 6v2M9.5 9.5C9.5 8.1 10.6 7 12 7s2.5 1.1 2.5 2.5c0 2.5-5 2.5-5 5C9.5 15.9 10.6 17 12 17s2.5-1.1 2.5-2.5"/></svg>

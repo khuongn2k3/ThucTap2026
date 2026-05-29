@@ -57,6 +57,8 @@ class PaymentResponse(BaseModel):
     transfer_content: str  # Nội dung chuyển khoản
     qr_code_url: Optional[str] = None
     expires_at: datetime
+    account_number: str
+    bank_id: str
     
     class Config:
         from_attributes = True
@@ -106,7 +108,7 @@ async def create_payment(
         amount_vnd=package["price_vnd"],
         tokens=package["tokens"],
         status='pending',  # ✅ String, không phải PaymentStatus.PENDING
-        expires_at=datetime.utcnow() + timedelta(minutes=60)  # 60 minutes expiry
+        expires_at=datetime.utcnow() + timedelta(minutes=10)  # 10 minutes expiry
     )
     
     db.add(payment)
@@ -126,7 +128,7 @@ async def create_payment(
         package_id=payment.package_id,
         amount_vnd=payment.amount_vnd,
         tokens=payment.tokens,
-        status=payment.status,  # ✅ Đã là string rồi, không cần .value
+        status=payment.status,
         transfer_content=transfer_content,
         qr_code_url=generate_sepay_qr(
             account=settings.BANK_ACCOUNT,
@@ -134,7 +136,9 @@ async def create_payment(
             amount=int(package["price_vnd"]),
             content=transfer_content
         ),
-        expires_at=payment.expires_at
+        expires_at=payment.expires_at,
+        account_number=settings.BANK_ACCOUNT,
+        bank_id=settings.BANK_ID,
     )
 
 
@@ -219,35 +223,32 @@ async def check_payment_status(
 async def check_sepay_transactions(payment: Payment, db: Session) -> tuple[bool, Optional[str]]:
     """
     Check if payment exists in SePay transactions.
-    
+
     Returns (matched: bool, transaction_id: str)
     """
     if not sepay_client:
         return False, None
-    
-    # Get transactions from SePay
-    transactions = await sepay_client.get_transactions(limit=20)
-    
-    # Build regex pattern
+
+    transactions = await sepay_client.get_transactions(limit=50)
+
+    if not transactions:
+        return False, None
+
     prefix = f"{settings.NAME_WEB}NAPTOKEN"
-    pattern = rf"{prefix}\s*([A-Fa-f0-9]+)"
-    
-    target_hex = payment.hex_id
-    
+    pattern = rf"{re.escape(prefix)}\s*([A-Fa-f0-9]+)"
+    target_hex = payment.hex_id.upper()
+
     for tx in transactions:
-        content = tx.get("content", "").upper()
-        amount = float(tx.get("amount_in", 0))
-        
-        # Search for hex code in content
+        content = tx.get("transaction_content", "").upper()
+        amount = float(tx.get("amount_in", 0) or 0)
+
         match = re.search(pattern, content, re.IGNORECASE)
-        
+
         if match:
             found_hex = match.group(1).upper()
-            
-            # Check if hex matches and amount is sufficient
             if found_hex == target_hex and amount >= payment.amount_vnd:
                 return True, tx.get("id")
-    
+
     return False, None
 
 

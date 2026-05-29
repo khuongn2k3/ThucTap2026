@@ -57,7 +57,7 @@ class Settings:
     # =========================================
     # PAYMENT (Optional)
     # =========================================
-    NAME_WEB: str = "HUNYUAN3D"
+    NAME_WEB: str = os.getenv("NAME_WEB", "FORMA")
     SEPAY_API_KEY: str = os.getenv("SEPAY_API_KEY", "")
     SEPAY_WEBHOOK_SECRET: str = os.getenv("SEPAY_WEBHOOK_SECRET", "")
     BANK_ID: str = os.getenv("BANK_ID", "BIDV")

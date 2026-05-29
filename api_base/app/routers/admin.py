@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from app.models.base_db import get_db
 from app.models.task import ModelJob
 from app.models.user import User
+from app.models.payment import Payment
 from app.security.security import get_current_admin
 from app.services.hunyuan3d_mv_service import hunyuan3d_mv_service
 
@@ -430,4 +431,74 @@ async def cancel_job(
         "job_id": job_id,
         "status": "cancelled",
         "refunded_tokens": refunded_tokens,
+    }
+
+# =========================================
+# PAYMENTS
+# =========================================
+
+@router.get("/payments")
+async def list_payments(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    status: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """List all payments with optional status filter."""
+    # Auto-expire stale pending payments before returning list
+    db.query(Payment).filter(
+        Payment.status == "pending",
+        Payment.expires_at < datetime.utcnow(),
+    ).update({"status": "expired"}, synchronize_session=False)
+    db.commit()
+
+    q = db.query(Payment, User).join(User, User.id == Payment.user_id)
+    if status and status != "all":
+        q = q.filter(Payment.status == status)
+    total = q.count()
+    rows = q.order_by(Payment.created_at.desc()).offset(offset).limit(limit).all()
+    return {
+        "total": total,
+        "payments": [
+            {
+                "id": p.id,
+                "hex_id": p.hex_id,
+                "user_id": p.user_id,
+                "user_name": u.name,
+                "user_email": u.email,
+                "package_id": p.package_id,
+                "amount_vnd": p.amount_vnd,
+                "tokens": p.tokens,
+                "status": p.status,
+                "sepay_transaction_id": p.sepay_transaction_id,
+                "created_at": p.created_at,
+                "expires_at": p.expires_at,
+                "paid_at": p.paid_at,
+            }
+            for p, u in rows
+        ],
+    }
+
+
+@router.get("/payments/stats")
+async def payment_stats(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """Revenue and payment stats for admin dashboard."""
+    from sqlalchemy import func
+    total     = db.query(func.count(Payment.id)).scalar() or 0
+    completed = db.query(func.count(Payment.id)).filter(Payment.status == "completed").scalar() or 0
+    pending   = db.query(func.count(Payment.id)).filter(Payment.status == "pending").scalar() or 0
+    expired   = db.query(func.count(Payment.id)).filter(Payment.status == "expired").scalar() or 0
+    revenue   = db.query(func.sum(Payment.amount_vnd)).filter(Payment.status == "completed").scalar() or 0
+    tokens_sold = db.query(func.sum(Payment.tokens)).filter(Payment.status == "completed").scalar() or 0
+    return {
+        "total": total,
+        "completed": completed,
+        "pending": pending,
+        "expired": expired,
+        "revenue_vnd": float(revenue),
+        "tokens_sold": int(tokens_sold),
     }

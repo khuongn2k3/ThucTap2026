@@ -1,6 +1,6 @@
 import { NavLink, Link, useNavigate } from "react-router-dom"
 import { useEffect, useState } from "react"
-import { getMe } from "../services/api"
+import { getMe, getUserTokens } from "../services/api"
 import AuthModal from "./AuthModal"
 import ProfileModal from "./ProfileModal"
 import PaymentModal from "./PaymentModal"
@@ -43,6 +43,8 @@ export default function Navbar() {
 
   const handleLogout = () => {
     localStorage.removeItem("token")
+    // Không xóa convert3d_active_job ở đây — job được lưu kèm userId
+    // để khi login lại đúng account thì vẫn restore được tiến trình
     setUser(null)
     navigate("/")
   }
@@ -214,7 +216,11 @@ export default function Navbar() {
       {showPayment && (
         <PaymentModal
           onClose={() => setShowPayment(false)}
-          onSuccess={() => setUser(prev => ({ ...prev, tokens: (prev?.tokens || 0) }))}
+          onSuccess={() => {
+            getUserTokens()
+              .then(res => setUser(prev => ({ ...prev, tokens: res.data.tokens })))
+              .catch(() => {})
+          }}
         />
       )}
     </>

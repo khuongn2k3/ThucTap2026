@@ -5,12 +5,6 @@ SePay API client for checking bank transactions.
 import httpx
 from typing import List, Dict, Optional
 
-try:
-    from app.config import settings
-except ImportError:
-    class settings:
-        SEPAY_API_KEY = None
-
 
 class SepayClient:
     """SePay API client."""
@@ -27,17 +21,6 @@ class SepayClient:
     async def get_transactions(self, limit: int = 20) -> List[Dict]:
         """
         Get recent bank transactions.
-        
-        Returns list of transactions:
-        [
-            {
-                "id": "TXN123",
-                "amount_in": 50000,
-                "content": "HUNYUAN3DNAPTOKEN5EA94",
-                "transaction_date": "2026-02-12 10:30:00",
-                ...
-            }
-        ]
         """
         if not self.api_key:
             return []
@@ -45,7 +28,7 @@ class SepayClient:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(
-                    f"{self.BASE_URL}/transactions",
+                    f"{self.BASE_URL}/transactions/list",
                     headers=self.headers,
                     params={"limit": limit}
                 )
@@ -61,7 +44,13 @@ class SepayClient:
 
 
 # Singleton instance
-try:
-    sepay_client = SepayClient(settings.SEPAY_API_KEY) if settings.SEPAY_API_KEY else None
-except:
-    sepay_client = None
+def _make_client():
+    try:
+        from app.config import settings
+        if settings.SEPAY_API_KEY:
+            return SepayClient(settings.SEPAY_API_KEY)
+    except Exception:
+        pass
+    return None
+
+sepay_client = _make_client()
