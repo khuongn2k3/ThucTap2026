@@ -1536,7 +1536,8 @@ class Hunyuan3DMvService:
                 "error_message": "Job was deleted",
             })
 
-        db.delete(job)
+        # Soft delete: ẩn khỏi my-jobs của user nhưng admin vẫn thấy trong Jobs 3D
+        job.deleted_by_user = True
         db.commit()
         if job_id in self.task_cache:
             del self.task_cache[job_id]
@@ -1546,6 +1547,7 @@ class Hunyuan3DMvService:
         jobs = (
             db.query(ModelJob)
             .filter(ModelJob.user_id == user_id)
+            .filter(ModelJob.deleted_by_user == False)  # Ẩn job user đã xóa, admin vẫn thấy
             .order_by(ModelJob.created_at.desc())
             .limit(limit)
             .offset(offset)

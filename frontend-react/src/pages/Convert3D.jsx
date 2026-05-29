@@ -132,7 +132,7 @@ function Toggle({ on, onChange, disabled }) {
 
 // ────────────────────────────────────────────────────────────────────────────
 // Image upload slot — giống Tripo
-function Slot({ label, file, onChange, disabled }) {
+function Slot({ label, file, onChange, disabled, tooltip, tooltipAlign = "right" }) {
   const ref = useRef()
   const preview = useMemo(() => {
     if (!file) return null
@@ -199,9 +199,10 @@ function Slot({ label, file, onChange, disabled }) {
         )}
       </div>
       <span style={{ fontSize: 10, color: "#666", textAlign: "center",
-        fontWeight: 600, letterSpacing: "0.06em" }}>
+        fontWeight: 600, letterSpacing: "0.06em", display: "flex", alignItems: "center", justifyContent: "center", gap: 3 }}>
         {label}
         {label === "Front" && <span style={{ color: "#f59e0b", marginLeft: 2 }}>*</span>}
+        {tooltip && <Tooltip text={tooltip} align={tooltipAlign} />}
       </span>
     </div>
   )
@@ -209,7 +210,7 @@ function Slot({ label, file, onChange, disabled }) {
 
 // ────────────────────────────────────────────────────────────────────────────
 // ── Tooltip nhỏ khi hover dấu ? ─────────────────────────────────────────────
-function Tooltip({ text }) {
+function Tooltip({ text, align = "right" }) {
   const [show, setShow] = useState(false)
   return (
     <div style={{ position: "relative", display: "inline-flex" }}
@@ -222,11 +223,13 @@ function Tooltip({ text }) {
       </svg>
       {show && (
         <div style={{
-          position: "absolute", bottom: "calc(100% + 6px)", left: "50%",
-          transform: "translateX(-50%)", width: 180, whiteSpace: "pre-line",
+          position: "absolute", bottom: "calc(100% + 6px)",
+          left: "50%", transform: "translateX(-50%)",
+          width: 140, whiteSpace: "pre-line",
           background: "#1e1e28", border: "1px solid #303040",
-          borderRadius: 8, padding: "8px 10px", fontSize: 11,
+          borderRadius: 8, padding: "6px 8px", fontSize: 10,
           color: "#aaa", lineHeight: 1.5, zIndex: 100, pointerEvents: "none",
+          textAlign: "center",
         }}>
           {text}
         </div>
@@ -944,10 +947,10 @@ export default function Convert3D() {
 
           {/* Image slots grid */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
-            <Slot label="Front" file={front} onChange={setFront} disabled={isRunning} />
-            <Slot label="Left"  file={left}  onChange={setLeft}  disabled={isRunning} />
-            <Slot label="Right" file={right} onChange={setRight} disabled={isRunning} />
-            <Slot label="Back"  file={back}  onChange={setBack}  disabled={isRunning} />
+            <Slot label="Front" file={front} onChange={setFront} disabled={isRunning} tooltip={"Straight front view.\n(Required)"} tooltipAlign="left" />
+            <Slot label="Left"  file={left}  onChange={setLeft}  disabled={isRunning} tooltip={"Camera on the left.\nShows RIGHT side of object."} tooltipAlign="right" />
+            <Slot label="Right" file={right} onChange={setRight} disabled={isRunning} tooltip={"Camera on the right.\nShows LEFT side of object."} tooltipAlign="left" />
+            <Slot label="Back"  file={back}  onChange={setBack}  disabled={isRunning} tooltip={"Rear view of object."} tooltipAlign="right" />
           </div>
 
           {/* Divider */}

@@ -96,12 +96,14 @@ async def get_stats(
     """System overview stats — total users, jobs, processing, failed."""
     total_users = db.query(User).count()
     total_jobs = db.query(ModelJob).count()
+    completed  = db.query(ModelJob).filter(ModelJob.status == "completed").count()
     processing = db.query(ModelJob).filter(ModelJob.status == "processing").count()
     failed = db.query(ModelJob).filter(ModelJob.status == "failed").count()
 
     return {
         "users": total_users,
         "jobs": total_jobs,
+        "completed": completed,
         "processing": processing,
         "failed": failed,
     }

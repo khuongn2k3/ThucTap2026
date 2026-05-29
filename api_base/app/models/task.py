@@ -38,6 +38,7 @@ class ModelJob(Base):
     tokens_used = Column(Integer, nullable=False, default=1)
     error_message = Column(Text, nullable=True)
     metrics = Column(JSON, nullable=True)  # VRAM, RAM, duration per stage
+    deleted_by_user = Column(Boolean, nullable=False, default=False)  # True = user đã xóa, ẩn khỏi my-jobs nhưng admin vẫn thấy
     created_at = Column(TIMESTAMP, server_default=func.now())
     completed_at = Column(DateTime, nullable=True)
     updated_at = Column(
