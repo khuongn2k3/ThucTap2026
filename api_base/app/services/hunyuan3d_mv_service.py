@@ -293,6 +293,37 @@ class Hunyuan3DMvService:
         """Xóa queue sau khi SSE connection đóng."""
         self._sse_queues.pop(job_id, None)
 
+    # ────────────────────────────────────────────────────────────────────────
+    # CANCEL CALLBACK HELPER
+    # ────────────────────────────────────────────────────────────────────────
+
+    class _CancelledByUser(Exception):
+        """Raise từ bên trong callback để thoát khỏi vòng lặp diffusion ngay lập tức."""
+        pass
+
+    def _make_cancel_callback(self, job_id: str):
+        """
+        Tạo callback truyền vào pipeline.
+        Được gọi sau mỗi diffusion step — nếu job_id đang trong _cancelled_jobs
+        thì raise _CancelledByUser để thoát ra ngay, không cần đợi hết inference.
+
+        Tương thích 2 signature:
+        - Shape pipeline (callback):               callback(step, timestep, outputs)
+        - Texture pipeline (callback_on_step_end): callback(pipeline, step, timestep, kwargs) -> dict
+        """
+        def callback(*args, **kwargs):
+            # Nếu có 4 args thì là texture (pipeline, step, timestep, callback_kwargs)
+            # Nếu có 3 args thì là shape (step, timestep, outputs)
+            step = args[1] if len(args) >= 4 else args[0]
+            if job_id in self._cancelled_jobs:
+                raise Hunyuan3DMVService._CancelledByUser(
+                    f"Job {job_id} bị hủy tại step {step}"
+                )
+            # texture callback_on_step_end phải trả về dict
+            if len(args) >= 4:
+                return {}
+        return callback
+
     async def request_cancel(self, job_id: str):
         """
         Yêu cầu hủy một job.
@@ -675,13 +706,25 @@ class Hunyuan3DMvService:
             loop = asyncio.get_running_loop()
             t_start = time.time()
             # _do_shape chạy trong thread — dùng _push_event (thread-safe) với loop
-            output_path = await asyncio.wait_for(
-                loop.run_in_executor(
-                    None, self._do_shape,
-                    job_id, pil_images, num_inference_steps, octree_resolution, polycount, guidance_scale, loop
-                ),
-                timeout=900  # 15 phút — đủ cho octree=512 + steps=100
-            )
+            try:
+                output_path = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None, self._do_shape,
+                        job_id, pil_images, num_inference_steps, octree_resolution, polycount, guidance_scale, loop
+                    ),
+                    timeout=900  # 15 phút — đủ cho octree=512 + steps=100
+                )
+            except Hunyuan3DMVService._CancelledByUser:
+                # 🛑 Cancel giữa chừng: callback raise từ bên trong diffusion loop
+                self._cancelled_jobs.discard(job_id)
+                self.task_cache.pop(job_id, None)
+                print(f"[{job_id}] Shape bị hủy giữa diffusion — VRAM đã unload trong _do_shape")
+                await self._push_event_async(job_id, "cancelled", {
+                    "stage": "shape",
+                    "message": "Job đã bị hủy giữa chừng, VRAM đã giải phóng",
+                    "vram_freed": True,
+                })
+                return  # finally sẽ set done_event → worker tiếp tục job kế
             duration = time.time() - t_start
 
             res_after = _get_resources()
@@ -812,15 +855,23 @@ class Hunyuan3DMvService:
             "message": "Diffusion model đang chạy...",
         }, loop=loop)
 
-        mesh = self.shape_pipeline(
-            image=pil_images,
-            num_inference_steps=num_inference_steps,
-            octree_resolution=octree_resolution,
-            guidance_scale=guidance_scale,
-            num_chunks=20000,
-            generator=torch.manual_seed(12345),
-            output_type='trimesh',
-        )[0]
+        cancel_cb = self._make_cancel_callback(job_id)
+        try:
+            mesh = self.shape_pipeline(
+                image=pil_images,
+                num_inference_steps=num_inference_steps,
+                octree_resolution=octree_resolution,
+                guidance_scale=guidance_scale,
+                num_chunks=20000,
+                generator=torch.manual_seed(12345),
+                output_type='trimesh',
+                callback=cancel_cb,
+                callback_steps=1,
+            )[0]
+        except Hunyuan3DMVService._CancelledByUser as e:
+            print(f"[{job_id}] Shape inference bị dừng giữa chừng do cancel: {e}")
+            self._unload_shape()
+            raise  # re-raise để _run_shape_bg bắt và xử lý tiếp
 
         if polycount and polycount > 0:
             self._push_event(job_id, "progress", {
@@ -1038,13 +1089,32 @@ class Hunyuan3DMvService:
             loop = asyncio.get_running_loop()
             t_start = time.time()
             self._tex_thread_active = True  # Bug2 fix: đánh dấu thread đang chạy
+            _cancelled_mid_inference = False
             try:
                 output_path = await loop.run_in_executor(
                     None, self._do_texture,
-		    tex_job_id, shape_job_id, front_image, texture_4k, loop, extra_images
+                    tex_job_id, shape_job_id, front_image, texture_4k, loop, extra_images
                 )
+            except Hunyuan3DMVService._CancelledByUser:
+                # 🛑 Cancel giữa chừng: callback raise từ bên trong diffusion loop
+                # _tex_thread_active vẫn True ở đây → _unload_texture sẽ bị guard chặn
+                # Dùng flag local để xử lý SAU KHI finally reset _tex_thread_active
+                _cancelled_mid_inference = True
+                self._cancelled_jobs.discard(tex_job_id)
+                self.task_cache.pop(tex_job_id, None)
             finally:
                 self._tex_thread_active = False
+
+            # Xử lý cancel SAU KHI finally reset _tex_thread_active — lúc này _unload_texture mới hoạt động
+            if _cancelled_mid_inference:
+                self._unload_texture()
+                print(f"[{tex_job_id}] Texture bị hủy giữa diffusion — VRAM đã giải phóng")
+                await self._push_event_async(tex_job_id, "cancelled", {
+                    "stage": "texture",
+                    "message": "Job đã bị hủy giữa chừng, VRAM đã giải phóng",
+                    "vram_freed": True,
+                })
+                return  # outer finally sẽ set done_event → worker tiếp tục job kế
             duration = time.time() - t_start
 
             res_after = _get_resources()
@@ -1053,7 +1123,7 @@ class Hunyuan3DMvService:
             self._record_duration("texture", duration)
 
             # 🛑 Check cancel: texture inference xong nhưng job đã bị hủy
-            # Unload pipeline ngay, bỏ qua lưu file và gallery
+            # (fallback — cancel đến đúng lúc step cuối vừa xong)
             if tex_job_id in self._cancelled_jobs:
                 self._cancelled_jobs.discard(tex_job_id)
                 self._unload_texture()
@@ -1230,24 +1300,27 @@ class Hunyuan3DMvService:
         }, loop=loop)
 
         # Gọi pipeline với đầy đủ param
+        cancel_cb = self._make_cancel_callback(tex_job_id)
         try:
-            
             if len(all_images) > 1:
                 mesh = self.tex_pipeline(
                     mesh,
                     image=all_images,
-		    
+                    cancel_callback=cancel_cb,
                 )
             else:
                 mesh = self.tex_pipeline(
                     mesh,
                     image=front_image,
-		    
+                    cancel_callback=cancel_cb,
                 )
+        except Hunyuan3DMVService._CancelledByUser:
+            # Không gọi _unload_texture ở đây vì đang trong thread (_tex_thread_active=True)
+            # guard trong _unload_texture sẽ block → unload sẽ do _run_texture_bg xử lý sau khi finally reset flag
+            raise  # re-raise để _run_texture_bg bắt và xử lý tiếp
         except TypeError:
-            
             print(f"⚠️  [{tex_job_id}] Pipeline không hỗ trợ multi-view hoặc extra params, fallback single image")
-            mesh = self.tex_pipeline(mesh, image=front_image)
+            mesh = self.tex_pipeline(mesh, image=front_image, cancel_callback=cancel_cb)
 
         self._push_event(tex_job_id, "progress", {
             "stage": "texture", "step": "export", "percent": 80,
