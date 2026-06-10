@@ -20,6 +20,30 @@ export default function History() {
   const isLoggedIn = !!localStorage.getItem("token")
 
   const openAssetModal = async (job) => {
+    // Stage 1 (white mesh) → luôn load white, không fetch gallery dù có submission_id
+    // (gallery model_url đã bị stage 2 overwrite thành textured GLB)
+    if (job.job_stage === "shape") {
+      if (job.output_model_url || job.input_image_url) {
+        const modelUrl = `${import.meta.env.VITE_API_URL}/download/${job.job_id}/white`
+        setSelectedModel({
+          id: job.job_id,
+          model_name: (job.model_name || "White Mesh") + " · " + (job.job_id?.slice(0, 8) || ""),
+          model_url: modelUrl,
+          image_url: job.front_image_url ?? job.input_image_url ?? null,
+          thumbnail_url: job.thumbnail_url ?? job.input_image_url ?? null,
+          front_image_url: job.front_image_url ?? null,
+          left_image_url:  job.left_image_url  ?? null,
+          right_image_url: job.right_image_url ?? null,
+          back_image_url:  job.back_image_url  ?? null,
+          has_texture: false,
+          has_skeleton: job.has_skeleton ?? false,
+          user: null,
+          _privateAsset: true,
+        })
+      }
+      return
+    }
+
     // Có submission_id → fetch full gallery data
     if (job.submission_id) {
       setLoadingModel(true)
@@ -28,28 +52,34 @@ export default function History() {
         const { uuid, model_name } = res.data
         const slug = `${(model_name || "model").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${uuid}`
         const full = await api.get(`/gallery/by-slug/${slug}`)
+
+        // Ưu tiên ảnh MV từ job (stage 1 job có đủ 4 ảnh).
+        // Nếu job hiện tại là stage 2 (front_image_url null), giữ nguyên ảnh từ gallery data.
+        // Chỉ override khi job thực sự có ảnh đó (khác null).
+        const mergedFront = job.front_image_url ?? full.data.front_image_url ?? null
+        const mergedLeft  = job.left_image_url  ?? full.data.left_image_url  ?? null
+        const mergedRight = job.right_image_url ?? full.data.right_image_url ?? null
+        const mergedBack  = job.back_image_url  ?? full.data.back_image_url  ?? null
+
         setSelectedModel({
           ...full.data,
-          front_image_url: job.front_image_url ?? null,
-          left_image_url:  job.left_image_url  ?? null,
-          right_image_url: job.right_image_url ?? null,
-          back_image_url:  job.back_image_url  ?? null,
+          front_image_url: mergedFront,
+          left_image_url:  mergedLeft,
+          right_image_url: mergedRight,
+          back_image_url:  mergedBack,
+          // Nếu gallery không có ảnh MV, fallback về image_url của job
+          image_url: full.data.image_url ?? job.input_image_url ?? null,
         })
         return
       } catch {}
       finally { setLoadingModel(false) }
     }
-    // Không có submission_id → dùng trực tiếp dữ liệu job
+    // Không có submission_id → stage 2 chưa có gallery, dùng trực tiếp dữ liệu job
     if (job.output_model_url || job.input_image_url) {
-      // Stage 1 white mesh: dùng URL /white thay vì output_model_url
-      const isWhite = job.job_stage === "shape"
-      const modelUrl = isWhite
-        ? `${import.meta.env.VITE_API_URL}/download/${job.job_id}/white`
-        : (job.output_model_url ?? null)
       setSelectedModel({
         id: job.job_id,
-        model_name: job.model_name || (isWhite ? "White Mesh" : "Model") + " · " + (job.job_id?.slice(0, 8) || ""),
-        model_url: modelUrl,
+        model_name: (job.model_name || "Model") + " · " + (job.job_id?.slice(0, 8) || ""),
+        model_url: job.output_model_url ?? null,
         image_url: job.front_image_url ?? job.input_image_url ?? null,
         thumbnail_url: job.thumbnail_url ?? job.input_image_url ?? null,
         front_image_url: job.front_image_url ?? null,

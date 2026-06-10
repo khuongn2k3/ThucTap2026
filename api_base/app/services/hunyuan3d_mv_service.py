@@ -1176,6 +1176,14 @@ class Hunyuan3DMvService:
                 job.has_skeleton = has_skeleton
                 if faces is not None: job.faces = faces
                 if vertices is not None: job.vertices = vertices
+                # Copy ảnh MV từ stage 1 job sang stage 2 để Asset page hiển thị đủ 4 ảnh
+                if not job.front_image_url:
+                    _s1 = db.query(ModelJob).filter(ModelJob.job_id == shape_job_id).first()
+                    if _s1:
+                        job.front_image_url = _s1.front_image_url
+                        job.left_image_url  = _s1.left_image_url
+                        job.right_image_url = _s1.right_image_url
+                        job.back_image_url  = _s1.back_image_url
                 db.commit()
 
             submission_id = None
