@@ -1,4 +1,6 @@
+import json
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Query
+from fastapi.responses import Response
 from typing import Optional
 from sqlalchemy.orm import Session
 from pathlib import Path
@@ -45,7 +47,10 @@ async def list_my_jobs(
     auth: AuthContext = Depends(get_auth_context),
 ):
     jobs = await hunyuan3d_mv_service.get_user_jobs(db, auth.user_id)
-    return {"jobs": jobs}
+    return Response(
+        content=json.dumps({"jobs": jobs}, indent=2, ensure_ascii=False),
+        media_type="application/json",
+    )
 
 @router.post("/my-jobs/upload-model")
 async def upload_model(
