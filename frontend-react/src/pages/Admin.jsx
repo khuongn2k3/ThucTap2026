@@ -1252,6 +1252,156 @@ function SectionRevenue() {
 /* ============================================================
    SECTION: API KEYS
    ============================================================ */
+
+function ApiUsageGuide() {
+  const [tab, setTab] = useState("bash")
+  const kw   = { color: "#7c6ef5" }
+  const url  = { color: "#34d399" }
+  const flag = { color: "#fbbf24" }
+  const val  = { color: "#f9a8d4" }
+  const cm   = { color: "#888" }
+  const tabStyle = (active) => ({
+    background: active ? "#1a1a2e" : "none",
+    border: active ? "0.5px solid #3a3a55" : "0.5px solid transparent",
+    borderRadius: 6, padding: "4px 14px", fontSize: 11,
+    cursor: "pointer", color: active ? "#a89ff5" : "#666",
+    fontFamily: "monospace", lineHeight: 1.6,
+  })
+  const codeBox = { background: "#0d0d0d", borderRadius: 8, padding: "14px 16px", fontFamily: "monospace", fontSize: 11.5, color: "#ccc", lineHeight: 2, overflowX: "auto" }
+  const nl   = tab === "bash" ? " \\" : tab === "ps" ? " `" : " ^"
+  const curl = tab === "bash" ? "curl" : "curl.exe"
+
+  const BashCmd = () => (
+    <div style={codeBox}>
+      <div style={cm}># Stage 1 — Generate white mesh</div>
+      <div><span style={kw}>{curl} -X POST</span>{" "}<span style={url}>https://api.example.com/api/v1/generate-shape-mv/upload</span>{nl}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"X-API-Key: sk_live_xxxx...abcd"</span>{nl}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-F</span> <span style={val}>"front=@front.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"left=@left.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"right=@right.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"back=@back.jpeg"</span></div>
+
+      <div style={{ ...cm, marginTop: 10 }}># Track Stage 1 progress (SSE stream)</div>
+      <div><span style={kw}>{curl}</span>{" "}<span style={url}>{"https://api.example.com/api/v1/job-progress-sse/{shape_job_id}"}</span></div>
+
+      <div style={{ ...cm, marginTop: 10 }}># Download white mesh</div>
+      <div><span style={kw}>{curl} -O</span>{" "}<span style={url}>{"https://api.example.com/api/v1/download/{shape_job_id}/white"}</span></div>
+
+      <div style={{ ...cm, marginTop: 14 }}># Stage 2 — Apply texture</div>
+      <div><span style={kw}>{curl} -X POST</span>{" "}<span style={url}>https://api.example.com/api/v1/generate-texture-mv</span>{nl}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"X-API-Key: sk_live_xxxx...abcd"</span>{nl}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"Content-Type: application/json"</span>{nl}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-d</span> <span style={val}>{`'{"shape_job_id": "<shape_job_id>", "texture_4k": true}'`}</span></div>
+
+      <div style={{ ...cm, marginTop: 10 }}># Track Stage 2 progress (SSE stream)</div>
+      <div><span style={kw}>{curl}</span>{" "}<span style={url}>{"https://api.example.com/api/v1/job-progress-sse/{texture_job_id}"}</span></div>
+
+      <div style={{ ...cm, marginTop: 10 }}># Download textured model</div>
+      <div><span style={kw}>{curl} -O</span>{" "}<span style={url}>{"https://api.example.com/api/v1/download/{texture_job_id}/textured"}</span></div>
+
+      <div style={{ ...cm, marginTop: 14 }}># Stage 1 + 2 combined — shape &amp; texture in one request</div>
+      <div><span style={kw}>{curl} -X POST</span>{" "}<span style={url}>https://api.example.com/api/v1/generate-full-mv/upload</span>{nl}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"X-API-Key: sk_live_xxxx...abcd"</span>{nl}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-F</span> <span style={val}>"front=@front.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"left=@left.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"right=@right.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"back=@back.jpeg"</span>{nl}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-F</span> <span style={val}>"texture_4k=true"</span></div>
+
+      <div style={{ ...cm, marginTop: 14 }}># List your jobs</div>
+      <div><span style={kw}>{curl}</span>{" "}<span style={url}>https://api.example.com/api/v1/my-jobs</span>{nl}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"X-API-Key: sk_live_xxxx...abcd"</span></div>
+    </div>
+  )
+
+  const PsCmd = () => (
+    <div style={codeBox}>
+      <div style={cm}># Stage 1 — Generate white mesh</div>
+      <div><span style={kw}>curl.exe -X POST</span>{" "}<span style={url}>https://api.example.com/api/v1/generate-shape-mv/upload</span>{" `"}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"X-API-Key: sk_live_xxxx...abcd"</span>{" `"}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-F</span> <span style={val}>"front=@front.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"left=@left.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"right=@right.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"back=@back.jpeg"</span></div>
+
+      <div style={{ ...cm, marginTop: 10 }}># Track Stage 1 progress (SSE stream)</div>
+      <div><span style={kw}>curl.exe</span>{" "}<span style={url}>{"https://api.example.com/api/v1/job-progress-sse/{shape_job_id}"}</span></div>
+
+      <div style={{ ...cm, marginTop: 10 }}># Download white mesh</div>
+      <div><span style={kw}>curl.exe -O</span>{" "}<span style={url}>{"https://api.example.com/api/v1/download/{shape_job_id}/white"}</span></div>
+
+      <div style={{ ...cm, marginTop: 14 }}># Stage 2 — Apply texture</div>
+      <div><span style={kw}>curl.exe -X POST</span>{" "}<span style={url}>https://api.example.com/api/v1/generate-texture-mv</span>{" `"}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"X-API-Key: sk_live_xxxx...abcd"</span>{" `"}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"Content-Type: application/json"</span>{" `"}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-d</span> <span style={val}>{'"{\\\"shape_job_id\\\": \\\"<shape_job_id>\\\", \\\"texture_4k\\\": true}"'}</span></div>
+
+      <div style={{ ...cm, marginTop: 10 }}># Track Stage 2 progress (SSE stream)</div>
+      <div><span style={kw}>curl.exe</span>{" "}<span style={url}>{"https://api.example.com/api/v1/job-progress-sse/{texture_job_id}"}</span></div>
+
+      <div style={{ ...cm, marginTop: 10 }}># Download textured model</div>
+      <div><span style={kw}>curl.exe -O</span>{" "}<span style={url}>{"https://api.example.com/api/v1/download/{texture_job_id}/textured"}</span></div>
+
+      <div style={{ ...cm, marginTop: 14 }}># Stage 1 + 2 combined — shape &amp; texture in one request</div>
+      <div><span style={kw}>curl.exe -X POST</span>{" "}<span style={url}>https://api.example.com/api/v1/generate-full-mv/upload</span>{" `"}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"X-API-Key: sk_live_xxxx...abcd"</span>{" `"}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-F</span> <span style={val}>"front=@front.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"left=@left.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"right=@right.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"back=@back.jpeg"</span>{" `"}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-F</span> <span style={val}>"texture_4k=true"</span></div>
+
+      <div style={{ ...cm, marginTop: 14 }}># List your jobs</div>
+      <div><span style={kw}>curl.exe</span>{" "}<span style={url}>https://api.example.com/api/v1/my-jobs</span>{" `"}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"X-API-Key: sk_live_xxxx...abcd"</span></div>
+    </div>
+  )
+
+  const CmdCmd = () => (
+    <div style={codeBox}>
+      <div style={cm}># Stage 1 — Generate white mesh</div>
+      <div><span style={kw}>curl.exe -X POST</span>{" "}<span style={url}>https://api.example.com/api/v1/generate-shape-mv/upload</span>{" ^"}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"X-API-Key: sk_live_xxxx...abcd"</span>{" ^"}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-F</span> <span style={val}>"front=@front.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"left=@left.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"right=@right.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"back=@back.jpeg"</span></div>
+
+      <div style={{ ...cm, marginTop: 10 }}># Track Stage 1 progress (SSE stream)</div>
+      <div><span style={kw}>curl.exe</span>{" "}<span style={url}>{"https://api.example.com/api/v1/job-progress-sse/{shape_job_id}"}</span></div>
+
+      <div style={{ ...cm, marginTop: 10 }}># Download white mesh</div>
+      <div><span style={kw}>curl.exe -O</span>{" "}<span style={url}>{"https://api.example.com/api/v1/download/{shape_job_id}/white"}</span></div>
+
+      <div style={{ ...cm, marginTop: 14 }}># Stage 2 — Apply texture</div>
+      <div><span style={kw}>curl.exe -X POST</span>{" "}<span style={url}>https://api.example.com/api/v1/generate-texture-mv</span>{" ^"}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"X-API-Key: sk_live_xxxx...abcd"</span>{" ^"}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"Content-Type: application/json"</span>{" ^"}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-d</span> <span style={val}>{'"{\\\"shape_job_id\\\": \\\"<shape_job_id>\\\", \\\"texture_4k\\\": true}"'}</span></div>
+
+      <div style={{ ...cm, marginTop: 10 }}># Track Stage 2 progress (SSE stream)</div>
+      <div><span style={kw}>curl.exe</span>{" "}<span style={url}>{"https://api.example.com/api/v1/job-progress-sse/{texture_job_id}"}</span></div>
+
+      <div style={{ ...cm, marginTop: 10 }}># Download textured model</div>
+      <div><span style={kw}>curl.exe -O</span>{" "}<span style={url}>{"https://api.example.com/api/v1/download/{texture_job_id}/textured"}</span></div>
+
+      <div style={{ ...cm, marginTop: 14 }}># Stage 1 + 2 combined — shape &amp; texture in one request</div>
+      <div><span style={kw}>curl.exe -X POST</span>{" "}<span style={url}>https://api.example.com/api/v1/generate-full-mv/upload</span>{" ^"}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"X-API-Key: sk_live_xxxx...abcd"</span>{" ^"}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-F</span> <span style={val}>"front=@front.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"left=@left.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"right=@right.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"back=@back.jpeg"</span>{" ^"}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-F</span> <span style={val}>"texture_4k=true"</span></div>
+
+      <div style={{ ...cm, marginTop: 14 }}># List your jobs</div>
+      <div><span style={kw}>curl.exe</span>{" "}<span style={url}>https://api.example.com/api/v1/my-jobs</span>{" ^"}</div>
+      <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"X-API-Key: sk_live_xxxx...abcd"</span></div>
+    </div>
+  )
+
+  return (
+    <>
+      <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+        <button style={tabStyle(tab === "bash")} onClick={() => setTab("bash")}>
+          bash / zsh<br /><span style={{ fontSize: 10, opacity: 0.7 }}>Linux · macOS</span>
+        </button>
+        <button style={tabStyle(tab === "ps")} onClick={() => setTab("ps")}>
+          PowerShell<br /><span style={{ fontSize: 10, opacity: 0.7 }}>Windows</span>
+        </button>
+        <button style={tabStyle(tab === "cmd")} onClick={() => setTab("cmd")}>
+          CMD<br /><span style={{ fontSize: 10, opacity: 0.7 }}>Windows</span>
+        </button>
+      </div>
+      {tab === "bash" && <BashCmd />}
+      {tab === "ps"   && <PsCmd />}
+      {tab === "cmd"  && <CmdCmd />}
+    </>
+  )
+}
+
 function SectionApiKeys() {
   const [keys, setKeys]             = useState([])
   const [loading, setLoading]       = useState(true)
@@ -1469,147 +1619,8 @@ function SectionApiKeys() {
       <div className="mt-6 rounded-2xl bg-white shadow p-5">
         <h3 className="text-sm font-semibold text-gray-900 mb-1">API Usage Guide</h3>
         <p className="text-xs text-gray-500 mb-3">Pass your API key via the header <code style={{ background: "#f3f4f6", padding: "1px 5px", borderRadius: 4 }}>X-API-Key</code></p>
-        {/* OS tab state */}
-        {(() => {
-          const [osTab, setOsTab] = React.useState("bash")
-          const bash = osTab === "bash"
-          const ps   = osTab === "ps"
-          const cmd  = osTab === "cmd"
-          const tabStyle = (active) => ({
-            background: active ? "#1a1a2e" : "none",
-            border: active ? "0.5px solid #3a3a55" : "0.5px solid transparent",
-            borderRadius: 6, padding: "4px 14px", fontSize: 11,
-            cursor: "pointer", color: active ? "#a89ff5" : "#666",
-            fontFamily: "monospace", lineHeight: 1.6,
-          })
-          const kw   = { color: "#7c6ef5" }
-          const url  = { color: "#34d399" }
-          const flag = { color: "#fbbf24" }
-          const val  = { color: "#f9a8d4" }
-          const cm   = { color: "#888" }
-          const cont = (active) => ({ display: active ? "block" : "none", background: "#0d0d0d", borderRadius: 8, padding: "14px 16px", fontFamily: "monospace", fontSize: 11.5, color: "#ccc", lineHeight: 2, overflowX: "auto" })
-          const nl   = bash ? " \\" : ps ? " `" : " ^"
-          const curl = bash ? "curl" : "curl.exe"
+        <ApiUsageGuide />
 
-          return (
-            <>
-              {/* Tabs */}
-              <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-                <button style={tabStyle(bash)} onClick={() => setOsTab("bash")}>bash / zsh{"\n"}<span style={{ fontSize: 10, opacity: 0.7 }}>Linux · macOS</span></button>
-                <button style={tabStyle(ps)}   onClick={() => setOsTab("ps")}>PowerShell{"\n"}<span style={{ fontSize: 10, opacity: 0.7 }}>Windows</span></button>
-                <button style={tabStyle(cmd)}  onClick={() => setOsTab("cmd")}>CMD{"\n"}<span style={{ fontSize: 10, opacity: 0.7 }}>Windows</span></button>
-              </div>
-
-              {/* bash / zsh */}
-              <div style={cont(bash)}>
-                <div style={cm}># Stage 1 — Generate white mesh</div>
-                <div><span style={kw}>{curl} -X POST</span>{" "}<span style={url}>https://api.example.com/api/v1/generate-shape-mv/upload</span>{nl}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"X-API-Key: sk_live_xxxx...abcd"</span>{nl}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-F</span> <span style={val}>"front=@front.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"left=@left.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"right=@right.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"back=@back.jpeg"</span></div>
-
-                <div style={{ ...cm, marginTop: 10 }}># Track Stage 1 progress (SSE stream)</div>
-                <div><span style={kw}>{curl}</span>{" "}<span style={url}>{"https://api.example.com/api/v1/job-progress-sse/{shape_job_id}"}</span></div>
-
-                <div style={{ ...cm, marginTop: 10 }}># Download white mesh</div>
-                <div><span style={kw}>{curl} -O</span>{" "}<span style={url}>{"https://api.example.com/api/v1/download/{shape_job_id}/white"}</span></div>
-
-                <div style={{ ...cm, marginTop: 14 }}># Stage 2 — Apply texture</div>
-                <div><span style={kw}>{curl} -X POST</span>{" "}<span style={url}>https://api.example.com/api/v1/generate-texture-mv</span>{nl}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"X-API-Key: sk_live_xxxx...abcd"</span>{nl}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"Content-Type: application/json"</span>{nl}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-d</span> <span style={val}>{`'{"shape_job_id": "<shape_job_id>", "texture_4k": true}'`}</span></div>
-
-                <div style={{ ...cm, marginTop: 10 }}># Track Stage 2 progress (SSE stream)</div>
-                <div><span style={kw}>{curl}</span>{" "}<span style={url}>{"https://api.example.com/api/v1/job-progress-sse/{texture_job_id}"}</span></div>
-
-                <div style={{ ...cm, marginTop: 10 }}># Download textured model</div>
-                <div><span style={kw}>{curl} -O</span>{" "}<span style={url}>{"https://api.example.com/api/v1/download/{texture_job_id}/textured"}</span></div>
-
-                <div style={{ ...cm, marginTop: 14 }}># Stage 1 + 2 combined — shape &amp; texture in one request</div>
-                <div><span style={kw}>{curl} -X POST</span>{" "}<span style={url}>https://api.example.com/api/v1/generate-full-mv/upload</span>{nl}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"X-API-Key: sk_live_xxxx...abcd"</span>{nl}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-F</span> <span style={val}>"front=@front.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"left=@left.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"right=@right.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"back=@back.jpeg"</span>{nl}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-F</span> <span style={val}>"texture_4k=true"</span></div>
-
-                <div style={{ ...cm, marginTop: 14 }}># List your jobs</div>
-                <div><span style={kw}>{curl}</span>{" "}<span style={url}>https://api.example.com/api/v1/my-jobs</span>{nl}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"X-API-Key: sk_live_xxxx...abcd"</span></div>
-              </div>
-
-              {/* PowerShell */}
-              <div style={cont(ps)}>
-                <div style={cm}># Stage 1 — Generate white mesh</div>
-                <div><span style={kw}>curl.exe -X POST</span>{" "}<span style={url}>https://api.example.com/api/v1/generate-shape-mv/upload</span>{" `"}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"X-API-Key: sk_live_xxxx...abcd"</span>{" `"}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-F</span> <span style={val}>"front=@front.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"left=@left.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"right=@right.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"back=@back.jpeg"</span></div>
-
-                <div style={{ ...cm, marginTop: 10 }}># Track Stage 1 progress (SSE stream)</div>
-                <div><span style={kw}>curl.exe</span>{" "}<span style={url}>{"https://api.example.com/api/v1/job-progress-sse/{shape_job_id}"}</span></div>
-
-                <div style={{ ...cm, marginTop: 10 }}># Download white mesh</div>
-                <div><span style={kw}>curl.exe -O</span>{" "}<span style={url}>{"https://api.example.com/api/v1/download/{shape_job_id}/white"}</span></div>
-
-                <div style={{ ...cm, marginTop: 14 }}># Stage 2 — Apply texture</div>
-                <div><span style={kw}>curl.exe -X POST</span>{" "}<span style={url}>https://api.example.com/api/v1/generate-texture-mv</span>{" `"}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"X-API-Key: sk_live_xxxx...abcd"</span>{" `"}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"Content-Type: application/json"</span>{" `"}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-d</span> <span style={val}>{String.raw`'{\"shape_job_id\": \"<shape_job_id>\", \"texture_4k\": true}'`}</span></div>
-
-                <div style={{ ...cm, marginTop: 10 }}># Track Stage 2 progress (SSE stream)</div>
-                <div><span style={kw}>curl.exe</span>{" "}<span style={url}>{"https://api.example.com/api/v1/job-progress-sse/{texture_job_id}"}</span></div>
-
-                <div style={{ ...cm, marginTop: 10 }}># Download textured model</div>
-                <div><span style={kw}>curl.exe -O</span>{" "}<span style={url}>{"https://api.example.com/api/v1/download/{texture_job_id}/textured"}</span></div>
-
-                <div style={{ ...cm, marginTop: 14 }}># Stage 1 + 2 combined — shape &amp; texture in one request</div>
-                <div><span style={kw}>curl.exe -X POST</span>{" "}<span style={url}>https://api.example.com/api/v1/generate-full-mv/upload</span>{" `"}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"X-API-Key: sk_live_xxxx...abcd"</span>{" `"}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-F</span> <span style={val}>"front=@front.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"left=@left.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"right=@right.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"back=@back.jpeg"</span>{" `"}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-F</span> <span style={val}>"texture_4k=true"</span></div>
-
-                <div style={{ ...cm, marginTop: 14 }}># List your jobs</div>
-                <div><span style={kw}>curl.exe</span>{" "}<span style={url}>https://api.example.com/api/v1/my-jobs</span>{" `"}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"X-API-Key: sk_live_xxxx...abcd"</span></div>
-              </div>
-
-              {/* CMD */}
-              <div style={cont(cmd)}>
-                <div style={cm}># Stage 1 — Generate white mesh</div>
-                <div><span style={kw}>curl.exe -X POST</span>{" "}<span style={url}>https://api.example.com/api/v1/generate-shape-mv/upload</span>{" ^"}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"X-API-Key: sk_live_xxxx...abcd"</span>{" ^"}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-F</span> <span style={val}>"front=@front.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"left=@left.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"right=@right.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"back=@back.jpeg"</span></div>
-
-                <div style={{ ...cm, marginTop: 10 }}># Track Stage 1 progress (SSE stream)</div>
-                <div><span style={kw}>curl.exe</span>{" "}<span style={url}>{"https://api.example.com/api/v1/job-progress-sse/{shape_job_id}"}</span></div>
-
-                <div style={{ ...cm, marginTop: 10 }}># Download white mesh</div>
-                <div><span style={kw}>curl.exe -O</span>{" "}<span style={url}>{"https://api.example.com/api/v1/download/{shape_job_id}/white"}</span></div>
-
-                <div style={{ ...cm, marginTop: 14 }}># Stage 2 — Apply texture</div>
-                <div><span style={kw}>curl.exe -X POST</span>{" "}<span style={url}>https://api.example.com/api/v1/generate-texture-mv</span>{" ^"}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"X-API-Key: sk_live_xxxx...abcd"</span>{" ^"}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"Content-Type: application/json"</span>{" ^"}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-d</span> <span style={val}>{`"{\\\"shape_job_id\\\": \\\"<shape_job_id>\\\", \\\"texture_4k\\\": true}"`}</span></div>
-
-                <div style={{ ...cm, marginTop: 10 }}># Track Stage 2 progress (SSE stream)</div>
-                <div><span style={kw}>curl.exe</span>{" "}<span style={url}>{"https://api.example.com/api/v1/job-progress-sse/{texture_job_id}"}</span></div>
-
-                <div style={{ ...cm, marginTop: 10 }}># Download textured model</div>
-                <div><span style={kw}>curl.exe -O</span>{" "}<span style={url}>{"https://api.example.com/api/v1/download/{texture_job_id}/textured"}</span></div>
-
-                <div style={{ ...cm, marginTop: 14 }}># Stage 1 + 2 combined — shape &amp; texture in one request</div>
-                <div><span style={kw}>curl.exe -X POST</span>{" "}<span style={url}>https://api.example.com/api/v1/generate-full-mv/upload</span>{" ^"}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"X-API-Key: sk_live_xxxx...abcd"</span>{" ^"}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-F</span> <span style={val}>"front=@front.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"left=@left.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"right=@right.jpeg"</span>{" "}<span style={flag}>-F</span> <span style={val}>"back=@back.jpeg"</span>{" ^"}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-F</span> <span style={val}>"texture_4k=true"</span></div>
-
-                <div style={{ ...cm, marginTop: 14 }}># List your jobs</div>
-                <div><span style={kw}>curl.exe</span>{" "}<span style={url}>https://api.example.com/api/v1/my-jobs</span>{" ^"}</div>
-                <div style={{ paddingLeft: 16 }}><span style={flag}>-H</span> <span style={val}>"X-API-Key: sk_live_xxxx...abcd"</span></div>
-              </div>
-            </>
-          )
-        })()}
       </div>
 
       {showCreate && (
