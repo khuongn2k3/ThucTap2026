@@ -695,9 +695,33 @@ async def export_model(
         raise HTTPException(404, "File model không tồn tại")
 
     model_rel  = sub.model_url
-    model_full = GALLERY_DIR / model_rel
-    src_ext    = Path(model_rel).suffix.lower()   # ".glb" | ".obj" | ".stl"
-    src_fmt    = src_ext.lstrip(".")              # "glb"  | "obj"  | "stl"
+    src_ext    = Path(model_rel.split("?")[0]).suffix.lower()   # ".glb" | ".obj" | ".stl" | ""
+    src_fmt    = src_ext.lstrip(".")                            # "glb"  | "obj"  | "stl"  | ""
+
+    # model_url là full URL không có extension (job generate: /download/{id}/white|textured)
+    # → tìm file thực trên DOWNLOAD_DIR theo job_id
+    if not src_fmt:
+        import re as _re
+        _m = _re.search(r"/download/([^/]+)/", model_rel)
+        if _m:
+            _jid = _m.group(1)
+            _DDIR = Path(settings.DOWNLOAD_DIR)
+            _candidates = [
+                (_DDIR / f"{_jid}.glb",       "glb"),
+                (_DDIR / f"{_jid}.white.glb", "glb"),
+                (_DDIR / f"{_jid}.stl",       "stl"),
+                (_DDIR / f"{_jid}.obj",       "obj"),
+            ]
+            _found = next((_f for _f, _e in _candidates if _f.exists()), None)
+            if _found is None:
+                raise HTTPException(404, "File model không tồn tại trên server")
+            model_full = _found
+            src_fmt    = _found.suffix.lstrip(".")
+        else:
+            raise HTTPException(400, "Không xác định được định dạng file gốc")
+    else:
+        model_full = GALLERY_DIR / model_rel
+
     base_name  = sub.model_name or Path(model_rel).stem
     safe_name  = "".join(c if c.isalnum() or c in "-_" else "_" for c in base_name)
 
