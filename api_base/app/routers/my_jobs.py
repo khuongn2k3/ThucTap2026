@@ -5,7 +5,7 @@ from pathlib import Path
 import uuid, shutil
 
 from app.models.base_db import get_db
-from app.security.security import get_current_user
+from app.security.security import get_current_user, get_auth_context, AuthContext
 from app.models.user import User
 from app.models.task import ModelJob
 from app.services.hunyuan3d_mv_service import hunyuan3d_mv_service
@@ -42,9 +42,9 @@ def _auto_thumbnail(model_abs: Path) -> str | None:
 @router.get("/my-jobs")
 async def list_my_jobs(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    auth: AuthContext = Depends(get_auth_context),
 ):
-    jobs = await hunyuan3d_mv_service.get_user_jobs(db, current_user.id)
+    jobs = await hunyuan3d_mv_service.get_user_jobs(db, auth.user_id)
     return {"jobs": jobs}
 
 @router.post("/my-jobs/upload-model")
