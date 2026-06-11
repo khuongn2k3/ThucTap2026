@@ -316,7 +316,7 @@ class Hunyuan3DMvService:
             # Nếu có 3 args thì là shape (step, timestep, outputs)
             step = args[1] if len(args) >= 4 else args[0]
             if job_id in self._cancelled_jobs:
-                raise Hunyuan3DMVService._CancelledByUser(
+                raise Hunyuan3DMvService._CancelledByUser(
                     f"Job {job_id} bị hủy tại step {step}"
                 )
             # texture callback_on_step_end phải trả về dict
@@ -714,7 +714,7 @@ class Hunyuan3DMvService:
                     ),
                     timeout=900  # 15 phút — đủ cho octree=512 + steps=100
                 )
-            except Hunyuan3DMVService._CancelledByUser:
+            except Hunyuan3DMvService._CancelledByUser:
                 # 🛑 Cancel giữa chừng: callback raise từ bên trong diffusion loop
                 self._cancelled_jobs.discard(job_id)
                 self.task_cache.pop(job_id, None)
@@ -868,7 +868,7 @@ class Hunyuan3DMvService:
                 callback=cancel_cb,
                 callback_steps=1,
             )[0]
-        except Hunyuan3DMVService._CancelledByUser as e:
+        except Hunyuan3DMvService._CancelledByUser as e:
             print(f"[{job_id}] Shape inference bị dừng giữa chừng do cancel: {e}")
             self._unload_shape()
             raise  # re-raise để _run_shape_bg bắt và xử lý tiếp
@@ -1095,7 +1095,7 @@ class Hunyuan3DMvService:
                     None, self._do_texture,
                     tex_job_id, shape_job_id, front_image, texture_4k, loop, extra_images
                 )
-            except Hunyuan3DMVService._CancelledByUser:
+            except Hunyuan3DMvService._CancelledByUser:
                 # 🛑 Cancel giữa chừng: callback raise từ bên trong diffusion loop
                 # _tex_thread_active vẫn True ở đây → _unload_texture sẽ bị guard chặn
                 # Dùng flag local để xử lý SAU KHI finally reset _tex_thread_active
@@ -1322,7 +1322,7 @@ class Hunyuan3DMvService:
                     image=front_image,
                     cancel_callback=cancel_cb,
                 )
-        except Hunyuan3DMVService._CancelledByUser:
+        except Hunyuan3DMvService._CancelledByUser:
             # Không gọi _unload_texture ở đây vì đang trong thread (_tex_thread_active=True)
             # guard trong _unload_texture sẽ block → unload sẽ do _run_texture_bg xử lý sau khi finally reset flag
             raise  # re-raise để _run_texture_bg bắt và xử lý tiếp

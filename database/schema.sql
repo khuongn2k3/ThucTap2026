@@ -30,7 +30,7 @@ CREATE TABLE users (
     role ENUM('user', 'admin') NOT NULL DEFAULT 'user',
     google_id VARCHAR(255) NULL UNIQUE,
     avatar_url VARCHAR(500) NULL,
-    tokens INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Token balance for 3D conversions',
+    tokens INT NOT NULL DEFAULT 0 COMMENT 'Token balance for 3D conversions',
     is_banned BOOLEAN NOT NULL DEFAULT FALSE COMMENT 'Account banned by admin',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -75,7 +75,7 @@ CREATE TABLE model_jobs (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     user_id INT UNSIGNED NULL,                          -- nullable, user có thể bị xoá
     job_id VARCHAR(100) NOT NULL UNIQUE,
-    status ENUM('pending', 'processing', 'completed', 'failed') NOT NULL DEFAULT 'pending',
+    status ENUM('pending', 'processing', 'completed', 'failed', 'cancelled') NOT NULL DEFAULT 'pending',
 
     input_image_url VARCHAR(500) NOT NULL,
     front_image_url VARCHAR(500) NULL,
@@ -93,6 +93,7 @@ CREATE TABLE model_jobs (
     tokens_used INT UNSIGNED NOT NULL DEFAULT 1 COMMENT 'Tokens consumed for this job',
     error_message TEXT NULL,
     metrics JSON NULL COMMENT 'VRAM, RAM, duration stats per stage',
+    deleted_by_user BOOLEAN NOT NULL DEFAULT FALSE COMMENT 'True = user đã xóa, ẩn khỏi my-jobs nhưng admin vẫn thấy',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     completed_at DATETIME NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
