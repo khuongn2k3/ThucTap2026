@@ -275,19 +275,19 @@ export default function PaymentModal({ onClose, onSuccess }) {
         }
         .pm-info-label {
           font-size: 11px; font-weight: 700;
-          text-transform: uppercase; letter-spacing: 0.09em; color: #444;
+          text-transform: uppercase; letter-spacing: 0.09em; color: #888;
         }
 
         /* ── POLLING ── */
         .pm-pulse { display: flex; align-items: center; gap: 5px; }
         .pm-dot {
-          width: 5px; height: 5px; border-radius: 50%; background: #2a2a2a;
+          width: 5px; height: 5px; border-radius: 50%; background: #666;
           animation: pm-pulse-anim 1.4s ease-in-out infinite;
         }
         .pm-dot:nth-child(2) { animation-delay: 0.2s; }
         .pm-dot:nth-child(3) { animation-delay: 0.4s; }
         @keyframes pm-pulse-anim {
-          0%,80%,100% { background:#222; transform:scale(1); }
+          0%,80%,100% { background:#555; transform:scale(1); }
           40% { background: var(--accent, #60a5fa); transform:scale(1.4); }
         }
 
@@ -295,17 +295,17 @@ export default function PaymentModal({ onClose, onSuccess }) {
         .pm-copy-btn {
           background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
           border-radius: 6px; padding: 4px 10px; cursor: pointer;
-          color: #3a3a3a; font-size: 12px; font-family: inherit;
+          color: #aaa; font-size: 12px; font-family: inherit;
           font-weight: 600; transition: all 0.15s; white-space: nowrap; flex-shrink: 0;
         }
-        .pm-copy-btn:hover { background: rgba(255,255,255,0.08); color: #888; border-color: rgba(255,255,255,0.14); }
+        .pm-copy-btn:hover { background: rgba(255,255,255,0.08); color: #ddd; border-color: rgba(255,255,255,0.14); }
         .pm-copy-btn.copied { color: #34d399; border-color: rgba(52,211,153,0.3); background: rgba(52,211,153,0.06); }
 
         /* ── TAG ── */
         .pm-tag {
           font-family: monospace;
           font-size: 13px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07);
-          border-radius: 6px; padding: 3px 10px; color: #666;
+          border-radius: 6px; padding: 3px 10px; color: #ccc;
           display: inline-flex; align-items: center; gap: 4px;
         }
 
@@ -500,7 +500,7 @@ export default function PaymentModal({ onClose, onSuccess }) {
                     <div className="pm-info-card" style={{ flex: 1 }}>
                       <div className="pm-info-label">Transfer content</div>
                       <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
-                        <span style={{ fontFamily: "monospace", fontSize: 13, color: "#666", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+                        <span style={{ fontFamily: "monospace", fontSize: 13, color: "#ccc", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
                           {payment.transfer_content}
                         </span>
                         <button
@@ -523,7 +523,7 @@ export default function PaymentModal({ onClose, onSuccess }) {
                       <div className="pm-pulse" style={{ "--accent": "#60a5fa" }}>
                         <div className="pm-dot" /><div className="pm-dot" /><div className="pm-dot" />
                       </div>
-                      <span style={{ fontSize: 11, color: "#444", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <span style={{ fontSize: 11, color: "#999", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {pollMsg}{dots}
                       </span>
                     </div>
